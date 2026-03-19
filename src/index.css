@@ -1,0 +1,176 @@
+@import url('https://fonts.googleapis.com/css2?family=K2D:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Aller Display';
+  src: url('/fonts/AllerDisplay.woff2') format('woff2'),
+       url('/fonts/AllerDisplay.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* Fragmentis brand palette */
+    --burnt-orange: 22 82% 44%;
+    --warm-orange: 36 100% 47%;
+    --deep-brown: 16 100% 25%;
+    --parchment: 34 56% 74%;
+    --sage-green: 112 8% 38%;
+    --soft-green-grey: 124 9% 61%;
+    --forest-green: 120 8% 29%;
+
+    /* Semantic tokens */
+    --background: 40 20% 96%;
+    --foreground: 120 8% 29%;
+
+    --card: 36 30% 93%;
+    --card-foreground: 16 100% 25%;
+
+    --popover: 40 20% 96%;
+    --popover-foreground: 16 100% 25%;
+
+    --primary: 120 8% 29%;
+    --primary-foreground: 40 30% 95%;
+
+    --secondary: 34 56% 74%;
+    --secondary-foreground: 16 100% 25%;
+
+    --muted: 40 15% 90%;
+    --muted-foreground: 120 6% 45%;
+
+    --accent: 112 8% 38%;
+    --accent-foreground: 40 30% 95%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 34 20% 82%;
+    --input: 34 20% 82%;
+    --ring: 112 8% 38%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 40 20% 96%;
+    --sidebar-foreground: 120 8% 29%;
+    --sidebar-primary: 120 8% 29%;
+    --sidebar-primary-foreground: 40 30% 95%;
+    --sidebar-accent: 34 56% 74%;
+    --sidebar-accent-foreground: 16 100% 25%;
+    --sidebar-border: 34 20% 82%;
+    --sidebar-ring: 112 8% 38%;
+
+    --pagination-active: 112 8% 38%;
+  }
+
+  .dark {
+    --background: 120 10% 10%;
+    --foreground: 34 30% 88%;
+    --card: 120 8% 14%;
+    --card-foreground: 34 30% 88%;
+    --popover: 120 8% 14%;
+    --popover-foreground: 34 30% 88%;
+    --primary: 34 56% 74%;
+    --primary-foreground: 120 8% 14%;
+    --secondary: 120 8% 22%;
+    --secondary-foreground: 34 30% 88%;
+    --muted: 120 8% 18%;
+    --muted-foreground: 34 20% 60%;
+    --accent: 112 8% 38%;
+    --accent-foreground: 34 30% 95%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 120 8% 22%;
+    --input: 120 8% 22%;
+    --ring: 112 8% 38%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+  @apply font-body bg-background text-foreground antialiased;
+  font-size: 18px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+  h1, h2, h3 {
+    font-family: 'Aller Display', 'Georgia', serif;
+  }
+}
+
+@layer components {
+  .memorial-card {
+    @apply relative overflow-hidden cursor-pointer;
+    border-radius: var(--card-radius, 16px);
+    box-shadow: 0 2px 16px -4px hsl(var(--forest-green) / 0.08);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+  }
+
+  .memorial-card:hover {
+    transform: scale(1.03);
+    box-shadow: 0 8px 30px -8px hsl(var(--forest-green) / 0.15);
+  }
+
+  .memorial-card img {
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .memorial-card:hover img {
+    transform: scale(1.08);
+  }
+
+  .memorial-card-overlay {
+    background: linear-gradient(to top, hsl(var(--forest-green) / 0.75) 0%, transparent 60%);
+  }
+
+  .nav-shadow {
+    box-shadow: 0 1px 8px -2px hsl(var(--forest-green) / 0.06);
+  }
+
+  .pagination-active {
+    background: hsl(var(--pagination-active));
+    color: hsl(40 30% 95%);
+  }
+
+  .search-bar-shadow {
+    box-shadow: 0 2px 12px -3px hsl(var(--forest-green) / 0.06);
+  }
+
+  /* Fragmentis diagonal motif */
+  .fragmentis-diagonal {
+    position: relative;
+  }
+  .fragmentis-diagonal::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      30.54deg,
+      transparent,
+      transparent 60px,
+      hsl(var(--parchment) / 0.06) 60px,
+      hsl(var(--parchment) / 0.06) 61px
+    );
+    pointer-events: none;
+  }
+
+  /* Glass effect for CTA */
+  .glass-effect {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: hsl(var(--sage-green) / 0.25);
+    border: 1px solid hsl(var(--soft-green-grey) / 0.3);
+  }
+}
