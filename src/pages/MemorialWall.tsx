@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { allPeople } from "@/data/memorialData";
+import { useMemorialPersons } from "@/hooks/useDirectus";
 import HeroSection from "@/components/HeroSection";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import MemorialCard from "@/components/MemorialCard";
@@ -11,38 +11,50 @@ type ViewMode = "grid" | "cards" | "list";
 type CountryFilter = "Toutes les personnes" | "Vietnam" | "Cambodge" | "Laos";
 
 const MemorialWall = () => {
+  const { people, loading, error } = useMemorialPersons();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCountry, setSelectedCountry] =
-    useState<CountryFilter>("Toutes les personnes");
+  const [selectedCountry, setSelectedCountry] = useState<CountryFilter>("Toutes les personnes");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const filteredPeople = useMemo(() => {
-    return allPeople.filter((person) => {
-      const fullName = `${person.firstName} ${person.lastName}`.toLowerCase();
+    return people.filter((person) => {
+      const fullName = `${person.first_name} ${person.last_name}`.toLowerCase();
       const matchesSearch = fullName.includes(searchQuery.toLowerCase());
 
       let matchesCountry = true;
-
       if (selectedCountry === "Cambodge") {
-        matchesCountry =
-          person.familyOrigin?.includes("Khmer") ||
-          person.familyOrigin?.includes("Cham") ||
-          false;
+        matchesCountry = person.family_origin?.includes("Khmer") || person.family_origin?.includes("Cham") || false;
       } else if (selectedCountry === "Vietnam") {
-        matchesCountry = person.familyOrigin?.includes("Vietnam") || false;
+        matchesCountry = person.family_origin?.includes("Vietnam") || false;
       } else if (selectedCountry === "Laos") {
-        matchesCountry = person.familyOrigin?.includes("Laos") || false;
+        matchesCountry = person.family_origin?.includes("Laos") || false;
       }
 
       return matchesSearch && matchesCountry;
     });
-  }, [searchQuery, selectedCountry]);
+  }, [people, searchQuery, selectedCountry]);
 
-  const handleReset = () => {
-    setSearchQuery("");
-    setSelectedCountry("Toutes les personnes");
-    setViewMode("grid");
-  };
+  if (loading) {
+    return (
+      <main className="container mx-auto px-4 py-10">
+        <HeroSection />
+        <div className="flex items-center justify-center py-32">
+          <p className="text-muted-foreground animate-pulse">Chargement du mémorial…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="container mx-auto px-4 py-10">
+        <HeroSection />
+        <div className="flex items-center justify-center py-32">
+          <p className="text-destructive">Erreur : {error}</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto px-4 py-10">
@@ -71,9 +83,9 @@ const MemorialWall = () => {
               <MemorialCard
                 key={person.id}
                 id={person.id}
-                firstName={person.firstName}
-                lastName={person.lastName}
-                imageSrc={person.imageSrc}
+                firstName={person.first_name}
+                lastName={person.last_name}
+                imageSrc={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
                 index={index}
               />
             ))}
@@ -103,38 +115,27 @@ const MemorialWall = () => {
                   <div className="grid md:grid-cols-[220px_1fr]">
                     <div className="h-[280px] md:h-full overflow-hidden">
                       <img
-                        src={person.imageSrc}
-                        alt={`${person.firstName} ${person.lastName}`}
+                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
+                        alt={`${person.first_name} ${person.last_name}`}
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     </div>
-
                     <div className="p-6 flex flex-col justify-center">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">
                         Fragment de mémoire
                       </p>
-
                       <h3 className="text-2xl font-semibold text-foreground">
-                        {person.firstName}{" "}
-                        <span className="uppercase">{person.lastName}</span>
+                        {person.first_name} <span className="uppercase">{person.last_name}</span>
                       </h3>
-
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {person.birthPlace} • {person.birthDate} — {person.deathDate}
+                        {person.birth_place} • {person.birth_date} — {person.death_date}
                       </p>
-
                       {person.profession && (
-                        <p className="mt-4 text-sm text-foreground/80">
-                          {person.profession}
-                        </p>
+                        <p className="mt-4 text-sm text-foreground/80">{person.profession}</p>
                       )}
-
-                      {person.familyOrigin && (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {person.familyOrigin}
-                        </p>
+                      {person.family_origin && (
+                        <p className="mt-2 text-sm text-muted-foreground">{person.family_origin}</p>
                       )}
-
                       <span className="mt-6 inline-flex w-fit rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                         Voir la mémoire
                       </span>
@@ -167,16 +168,16 @@ const MemorialWall = () => {
                   className="flex items-center gap-4 rounded-xl border border-border p-4 hover:bg-muted/40 transition-colors"
                 >
                   <img
-                    src={person.imageSrc}
-                    alt={`${person.firstName} ${person.lastName}`}
+                    src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
+                    alt={`${person.first_name} ${person.last_name}`}
                     className="w-16 h-16 rounded-lg object-cover"
                   />
                   <div>
                     <p className="font-semibold text-foreground">
-                      {person.firstName} {person.lastName}
+                      {person.first_name} {person.last_name}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {person.birthPlace} • {person.birthDate} — {person.deathDate}
+                      {person.birth_place} • {person.birth_date} — {person.death_date}
                     </p>
                   </div>
                 </Link>
