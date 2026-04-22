@@ -6,9 +6,12 @@ import HeroSection from "@/components/HeroSection";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import MemorialCard from "@/components/MemorialCard";
 import FloatingBackButton from "@/components/FloatingBackButton";
+import AddVictimeDialog from "@/components/AddVictimeDialog";
 
 type ViewMode = "grid" | "cards" | "list";
 type CountryFilter = "Toutes les personnes" | "Vietnam" | "Cambodge" | "Laos";
+
+import { User, ImageOff } from "lucide-react";
 
 const MemorialWall = () => {
   const { people, loading, error } = useMemorialPersons();
@@ -18,16 +21,16 @@ const MemorialWall = () => {
 
   const filteredPeople = useMemo(() => {
     return people.filter((person) => {
-      const fullName = `${person.first_name} ${person.last_name}`.toLowerCase();
+      const fullName = `${person.prenom} ${person.nom}`.toLowerCase();
       const matchesSearch = fullName.includes(searchQuery.toLowerCase());
 
       let matchesCountry = true;
       if (selectedCountry === "Cambodge") {
-        matchesCountry = person.family_origin?.includes("Khmer") || person.family_origin?.includes("Cham") || false;
+        matchesCountry = person.origine_familiale?.includes("Khmer") || person.origine_familiale?.includes("Cham") || false;
       } else if (selectedCountry === "Vietnam") {
-        matchesCountry = person.family_origin?.includes("Vietnam") || false;
+        matchesCountry = person.origine_familiale?.includes("Vietnam") || false;
       } else if (selectedCountry === "Laos") {
-        matchesCountry = person.family_origin?.includes("Laos") || false;
+        matchesCountry = person.origine_familiale?.includes("Laos") || false;
       }
 
       return matchesSearch && matchesCountry;
@@ -60,6 +63,10 @@ const MemorialWall = () => {
     <main className="container mx-auto px-4 py-10">
       <HeroSection />
 
+      <div className="flex flex-wrap justify-center gap-4 mb-8">
+        <AddVictimeDialog />
+      </div>
+
       <SearchFilterBar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -83,9 +90,9 @@ const MemorialWall = () => {
               <MemorialCard
                 key={person.id}
                 id={person.id}
-                firstName={person.first_name}
-                lastName={person.last_name}
-                imageSrc={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
+                firstName={person.prenom}
+                lastName={person.nom}
+                imageSrc={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.photo_principale}`}
                 index={index}
               />
             ))}
@@ -113,28 +120,32 @@ const MemorialWall = () => {
                   className="group block overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-xl"
                 >
                   <div className="grid md:grid-cols-[220px_1fr]">
-                    <div className="h-[280px] md:h-full overflow-hidden">
-                      <img
-                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
-                        alt={`${person.first_name} ${person.last_name}`}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    </div>
+                      <div className="h-[280px] md:h-full overflow-hidden bg-muted flex items-center justify-center">
+                        {person.photo_principale ? (
+                          <img
+                            src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.photo_principale}`}
+                            alt={`${person.prenom} ${person.nom}`}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <User size={64} className="text-muted-foreground/30" />
+                        )}
+                      </div>
                     <div className="p-6 flex flex-col justify-center">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">
                         Fragment de mémoire
                       </p>
                       <h3 className="text-2xl font-semibold text-foreground">
-                        {person.first_name} <span className="uppercase">{person.last_name}</span>
+                        {person.prenom} <span className="uppercase">{person.nom}</span>
                       </h3>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {person.birth_place} • {person.birth_date} — {person.death_date}
+                        {person.lieu_naissance || "Lieu inconnu"} • {person.date_naissance || "???"} — {person.date_deces || "???"}
                       </p>
                       {person.profession && (
                         <p className="mt-4 text-sm text-foreground/80">{person.profession}</p>
                       )}
-                      {person.family_origin && (
-                        <p className="mt-2 text-sm text-muted-foreground">{person.family_origin}</p>
+                      {person.origine_familiale && (
+                        <p className="mt-2 text-sm text-muted-foreground">{person.origine_familiale}</p>
                       )}
                       <span className="mt-6 inline-flex w-fit rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                         Voir la mémoire
@@ -167,17 +178,23 @@ const MemorialWall = () => {
                   to={`/memorial/${person.id}`}
                   className="flex items-center gap-4 rounded-xl border border-border p-4 hover:bg-muted/40 transition-colors"
                 >
-                  <img
-                    src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.image_src}`}
-                    alt={`${person.first_name} ${person.last_name}`}
-                    className="w-16 h-16 rounded-lg object-cover"
-                  />
+                  <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {person.photo_principale ? (
+                      <img
+                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.photo_principale}`}
+                        alt={`${person.prenom} ${person.nom}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User size={24} className="text-muted-foreground/40" />
+                    )}
+                  </div>
                   <div>
                     <p className="font-semibold text-foreground">
-                      {person.first_name} {person.last_name}
+                      {person.prenom} {person.nom}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {person.birth_place} • {person.birth_date} — {person.death_date}
+                      {person.date_naissance || "???"} — {person.date_deces || "???"}
                     </p>
                   </div>
                 </Link>

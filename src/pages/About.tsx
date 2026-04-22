@@ -13,11 +13,11 @@ const fadeUp = {
   }),
 };
 
-const ctaButtons = [
-  { label: "Adhérer à l'association", icon: Handshake, href: "#" },
-  { label: "Faire un don", icon: Heart, href: "#" },
-  { label: "Témoigner", icon: MessageCircle, href: "#" },
-];
+// const ctaButtons = [
+//   { label: "Adhérer à l'association", icon: Handshake, href: "#" },
+//   { label: "Faire un don", icon: Heart, href: "#" },
+//   { label: "Témoigner", icon: MessageCircle, href: "#" },
+// ];
 
 const missions = [
   "Préserver la mémoire des victimes",
@@ -56,7 +56,7 @@ const About = () => {
             variants={fadeUp}
             className="mx-auto mb-6 w-20 h-20 rounded-full  flex items-center justify-center"
           >
-            <img src="https://www.fragmentis-vitae.org/images/fragment-rond.svg" alt="fragments KH50 logo" height="100" width="100"/>
+            <img src="https://www.fragmentis-vitae.org/images/fragment-rond.svg" alt="fragments KH50 logo" height="100" width="100" />
           </motion.div>
 
           <motion.h1
@@ -102,27 +102,6 @@ const About = () => {
               allowFullScreen
             />
           </motion.div>
-        </div>
-      </section>
-
-      {/* CTA buttons */}
-      <section className="py-12 md:py-16">
-        <div className="container mx-auto px-4 flex flex-wrap justify-center gap-4">
-          {ctaButtons.map((btn, i) => (
-            <motion.a
-              key={btn.label}
-              href={btn.href}
-              custom={i}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={fadeUp}
-              className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full bg-brand-warm text-white font-medium text-sm hover:brightness-110 transition-all shadow-md hover:shadow-lg"
-            >
-              <btn.icon size={18} />
-              {btn.label}
-            </motion.a>
-          ))}
         </div>
       </section>
 
