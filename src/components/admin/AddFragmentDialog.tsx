@@ -15,19 +15,21 @@ interface AddFragmentDialogProps {
   victimeId: number;
   auteurTemoinId: number;
   onSuccess: () => void;
+  qualiteStatuts: any[];
+  typeFragments: any[];
 }
 
-export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess }: AddFragmentDialogProps) {
+export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualiteStatuts, typeFragments }: AddFragmentDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
 
   const [form, setForm] = useState({
-    type_id: TYPE_FRAGMENT_ID.TEMOIGNAGE,
+    type_id: typeFragments[0]?.id || 1,
     titre: "",
     description: "",
     annee_fragment: "",
-    statut_id: STATUT_ID.VERIFIE,
+    statut_id: qualiteStatuts[0]?.id || 2,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,11 +60,11 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess }: AddF
       toast.success("Fragment ajouté avec succès");
       setIsOpen(false);
       setForm({
-        type_id: TYPE_FRAGMENT_ID.TEMOIGNAGE,
+        type_id: typeFragments[0]?.id || 1,
         titre: "",
         description: "",
         annee_fragment: "",
-        statut_id: STATUT_ID.VERIFIE,
+        statut_id: qualiteStatuts[0]?.id || 2,
       });
       setMediaFile(null);
       onSuccess();
@@ -91,12 +93,9 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess }: AddF
               <Select value={String(form.type_id)} onValueChange={v => setForm(p => ({ ...p, type_id: Number(v) }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">Témoignage</SelectItem>
-                  <SelectItem value="2">Photographie</SelectItem>
-                  <SelectItem value="3">Vidéo</SelectItem>
-                  <SelectItem value="4">Récit</SelectItem>
-                  <SelectItem value="5">Document</SelectItem>
-                  <SelectItem value="7">Audio</SelectItem>
+                  {typeFragments.map(t => (
+                    <SelectItem key={t.id} value={String(t.id)}>{t.libelle}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -105,9 +104,9 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess }: AddF
               <Select value={String(form.statut_id)} onValueChange={v => setForm(p => ({ ...p, statut_id: Number(v) }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">✔ Vérifié</SelectItem>
-                  <SelectItem value="2">🟡 À vérifier</SelectItem>
-                  <SelectItem value="3">✗ Non fiable</SelectItem>
+                  {qualiteStatuts.map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

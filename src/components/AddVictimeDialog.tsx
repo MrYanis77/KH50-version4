@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { directus, directusAuth } from "@/integration/directus";
 import { createItem, updateItem, uploadFiles, readItems } from "@directus/sdk";
@@ -27,17 +27,35 @@ interface AddVictimeDialogProps {
   editVictime?: VictimeRow | null;
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "ghost";
+  statuses?: any[];
 }
 
 const STEPS = ["La victime", "Son parcours"];
 
-const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant = "default" }: AddVictimeDialogProps) => {
+const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant = "default", statuses: initialStatuses }: AddVictimeDialogProps) => {
   const isEdit = !!editVictime;
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statuses, setStatuses] = useState<any[]>(initialStatuses || []);
+
+  useEffect(() => {
+    if (initialStatuses) {
+      setStatuses(initialStatuses);
+      return;
+    }
+    const fetchStatuses = async () => {
+      try {
+        const s = await directus.request(readItems("mmrl_qualite_statut"));
+        setStatuses(s);
+      } catch (err) {
+        console.error("Error fetching statuses:", err);
+      }
+    };
+    fetchStatuses();
+  }, []);
 
   // — Helpers —
   const getId = (val: any): number => {
@@ -59,7 +77,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
     lieu_deces: editVictime?.lieu_deces || "",
     profession: editVictime?.profession || "",
     origine_familiale: editVictime?.origine_familiale || "",
-    statut_id: getId(editVictime?.statut_id) || STATUT_ID.A_VERIFIER,
+    statut_id: getId(editVictime?.statut_id) || initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
@@ -67,12 +85,12 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   const [sourceForm, setSourceForm] = useState({
     prenom: user?.first_name || "",
     nom: user?.last_name || "",
-    statut_id: STATUT_ID.A_VERIFIER,
+    statut_id: initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
   });
 
   // — Parcours entries —
   const [parcoursEntries, setParcoursEntries] = useState<ParcoursEntry[]>([
-    { annee: "", titre: "", description: "", statut_id: STATUT_ID.A_VERIFIER }
+    { annee: "", titre: "", description: "", statut_id: initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER }
   ]);
 
   const addParcoursEntry = () => {
@@ -86,10 +104,11 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   };
 
   const resetForms = () => {
-    setVictimeForm({ prenom: "", nom: "", sexe: "", annee_naissance: "", date_naissance: "", lieu_naissance: "", annee_deces: "", date_deces: "", lieu_deces: "", profession: "", origine_familiale: "", statut_id: STATUT_ID.A_VERIFIER });
-    setSourceForm({ prenom: user?.first_name || "", nom: user?.last_name || "", statut_id: STATUT_ID.A_VERIFIER });
+    const defaultStatutId = statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER;
+    setVictimeForm({ prenom: "", nom: "", sexe: "", annee_naissance: "", date_naissance: "", lieu_naissance: "", annee_deces: "", date_deces: "", lieu_deces: "", profession: "", origine_familiale: "", statut_id: defaultStatutId });
+    setSourceForm({ prenom: user?.first_name || "", nom: user?.last_name || "", statut_id: defaultStatutId });
     setPhotoFile(null);
-    setParcoursEntries([{ annee: "", titre: "", description: "", statut_id: STATUT_ID.A_VERIFIER }]);
+    setParcoursEntries([{ annee: "", titre: "", description: "", statut_id: defaultStatutId }]);
     setStep(0);
   };
 
@@ -150,7 +169,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
               prenom: user.first_name || "",
               nom: user.last_name || "",
               email: user.email,
-              statut_id: STATUT_ID.A_VERIFIER,
+              statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
             } as any));
             temoinId = (t as any).id;
           }
@@ -172,7 +191,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
             source_user_id: user.id,
             prenom: sourceForm.prenom || user.first_name || "",
             nom: sourceForm.nom || user.last_name || "",
-            statut_id: sourceForm.statut_id || STATUT_ID.A_VERIFIER,
+            statut_id: sourceForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
           } as any));
           sourceId = (s as any).id;
         }
@@ -202,7 +221,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
           profession: victimeForm.profession || null,
           origine_familiale: victimeForm.origine_familiale || null,
           photo_principale: photoId,
-          statut_id: victimeForm.statut_id || STATUT_ID.A_VERIFIER,
+          statut_id: victimeForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
         } as any));
         victimeId = (v as any).id;
 
@@ -262,11 +281,23 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
     }
   };
 
-  const StatutBadge = ({ statut_id }: { statut_id: number }) => (
-    <Badge className={statut_id === STATUT_ID.VERIFIE ? 'bg-white text-gray-800 border border-gray-300' : statut_id === STATUT_ID.NON_FIABLE ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-yellow-100 text-yellow-800 border border-yellow-300'}>
-      {statut_id === STATUT_ID.VERIFIE ? '✔ Vérifié' : statut_id === STATUT_ID.NON_FIABLE ? '✗ Non fiable' : '🟡 À vérifier'}
-    </Badge>
-  );
+  const StatutBadge = ({ statut_id }: { statut_id: number }) => {
+    const s = statuses.find(x => x.id === statut_id);
+    if (!s) return null;
+    const color = s.couleur_hex || '#666';
+    return (
+      <Badge 
+        style={{ 
+          backgroundColor: color + '15', 
+          color: color,
+          borderColor: color + '30'
+        }}
+        className="border font-medium"
+      >
+        {s.libelle}
+      </Badge>
+    );
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpen}>
@@ -350,9 +381,9 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="2">🟡 À vérifier / Hypothèse</SelectItem>
-                      <SelectItem value="1">✔ Avéré / Vérifié</SelectItem>
-                      <SelectItem value="3">✗ Non fiable</SelectItem>
+                      {statuses.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -431,9 +462,9 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2">🟡 À vérifier / Hypothèse</SelectItem>
-                        <SelectItem value="1">✔ Avéré / Vérifié</SelectItem>
-                        <SelectItem value="3">✗ Non fiable</SelectItem>
+                        {statuses.map(s => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -481,8 +512,9 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="2">🟡 Hypothèse</SelectItem>
-                          <SelectItem value="1">✔ Avéré</SelectItem>
+                          {statuses.map(s => (
+                            <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

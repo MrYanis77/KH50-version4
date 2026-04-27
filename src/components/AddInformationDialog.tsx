@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { directus, directusAuth } from "@/integration/directus";
 import { createItem, uploadFiles, readItems } from "@directus/sdk";
@@ -17,24 +17,49 @@ interface AddInformationDialogProps {
   victimeId: number;
   victimeName: string;
   trigger?: React.ReactNode;
+  types?: any[];
+  statuses?: any[];
 }
 
-export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInformationDialogProps) => {
+export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: initialTypes, statuses: initialStatuses }: AddInformationDialogProps) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [fragmentForm, setFragmentForm] = useState({
-    type_id: TYPE_FRAGMENT_ID.TEMOIGNAGE,
+    type_id: initialTypes?.[0]?.id || TYPE_FRAGMENT_ID.TEMOIGNAGE,
     titre: "",
     description: "",
     annee_fragment: "",
     date_fragment: "",
-    statut_id: STATUT_ID.A_VERIFIER,
+    statut_id: initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
   });
 
   const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [types, setTypes] = useState<any[]>(initialTypes || []);
+  const [statuses, setStatuses] = useState<any[]>(initialStatuses || []);
+
+  useEffect(() => {
+    if (initialTypes && initialStatuses) {
+      setTypes(initialTypes);
+      setStatuses(initialStatuses);
+      return;
+    }
+    const fetchData = async () => {
+      try {
+        const [t, s] = await Promise.all([
+          directus.request(readItems("mmrl_type_fragment")),
+          directus.request(readItems("mmrl_qualite_statut"))
+        ]);
+        setTypes(t);
+        setStatuses(s);
+      } catch (err) {
+        console.error("Error fetching types/statuses:", err);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleOpen = (open: boolean) => {
     if (open && !user) {
@@ -72,7 +97,7 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInf
           prenom: user.first_name || "",
           nom: user.last_name || "",
           email: user.email,
-          statut_id: STATUT_ID.A_VERIFIER,
+          statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
         }));
         temoinId = (t as any).id;
       }
@@ -96,7 +121,7 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInf
         annee_fragment: fragmentForm.annee_fragment ? Number(fragmentForm.annee_fragment) : null,
         date_fragment: fragmentForm.date_fragment || null,
         fichier_media: uploadedMediaId,
-        statut_id: fragmentForm.statut_id || STATUT_ID.A_VERIFIER,
+        statut_id: fragmentForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
       }));
 
       toast.success("Votre information a été soumise. Elle sera publiée après vérification.");
@@ -104,12 +129,12 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInf
 
       // Reset form properly
       setFragmentForm({
-        type_id: TYPE_FRAGMENT_ID.TEMOIGNAGE,
+        type_id: types[0]?.id || TYPE_FRAGMENT_ID.TEMOIGNAGE,
         titre: "",
         description: "",
         annee_fragment: "",
         date_fragment: "",
-        statut_id: STATUT_ID.A_VERIFIER,
+        statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
       });
       setMediaFile(null);
     } catch (err: any) {
@@ -150,12 +175,9 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInf
                 <Select value={String(fragmentForm.type_id)} onValueChange={(v) => setFragmentForm(p => ({ ...p, type_id: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Témoignage oral/écrit</SelectItem>
-                    <SelectItem value="2">Photographie</SelectItem>
-                    <SelectItem value="3">Vidéo</SelectItem>
-                    <SelectItem value="4">Récit</SelectItem>
-                    <SelectItem value="5">Document d'archive</SelectItem>
-                    <SelectItem value="6">Information sur un lieu</SelectItem>
+                    {types.map(t => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.libelle}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -163,13 +185,13 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger }: AddInf
               <div className="space-y-2">
                 <Label>Statut de l'information (Certitude)</Label>
                 <Select value={String(fragmentForm.statut_id)} onValueChange={(v) => setFragmentForm(p => ({ ...p, statut_id: Number(v) }))}>
-                  <SelectTrigger className={fragmentForm.statut_id === STATUT_ID.A_VERIFIER ? 'border-yellow-400' : ''}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="2">🟡 À vérifier / Hypothèse</SelectItem>
-                    <SelectItem value="1">✔ Avéré / Vérifié</SelectItem>
-                    <SelectItem value="3">✗ Non fiable</SelectItem>
+                    {statuses.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

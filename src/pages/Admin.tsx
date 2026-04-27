@@ -294,19 +294,21 @@ const Admin = () => {
               
               {/* ─── DOSSIERS ─── */}
               <TabsContent value="dossiers" className="mt-0">
-                <DossiersPanel
-                  victimes={victimes}
-                  temoins={temoins}
-                  sources={sources}
-                  parcours={parcours}
-                  fragments={fragments}
-                  setVictimes={setVictimes}
-                  setTemoins={setTemoins}
-                  setSources={setSources}
-                  setParcours={setParcours}
-                  setFragments={setFragments}
-                  onRefresh={refreshAction}
-                />
+                  <DossiersPanel
+                    victimes={victimes}
+                    temoins={temoins}
+                    sources={sources}
+                    parcours={parcours}
+                    fragments={fragments}
+                    setVictimes={setVictimes}
+                    setTemoins={setTemoins}
+                    setSources={setSources}
+                    setParcours={setParcours}
+                    setFragments={setFragments}
+                    onRefresh={refreshAction}
+                    qualiteStatuts={qualiteStatuts}
+                    typeFragments={typeFragments}
+                  />
               </TabsContent>
 
               {/* ─── FRAGMENTS ─── */}
@@ -492,6 +494,7 @@ const Admin = () => {
         onClose={() => setViewingItem(null)} 
         type={viewingItem?.type as any} 
         data={viewingItem?.data} 
+        qualiteStatuts={qualiteStatuts}
       />
     </div>
   );

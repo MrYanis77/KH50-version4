@@ -39,6 +39,8 @@ interface DossiersPanelProps {
   setParcours: (fn: (prev: ParcoursRow[]) => ParcoursRow[]) => void;
   setFragments: (fn: (prev: FragmentRow[]) => FragmentRow[]) => void;
   onRefresh: () => void;
+  qualiteStatuts: any[];
+  typeFragments: any[];
 }
 
 type StatutFilter = "tous" | "verifie" | "a_verifier" | "non_fiable";
@@ -73,63 +75,30 @@ function normalizeStatutId(raw: any): number {
 /** Inline coloured status badge */
 function StatutBadge({
   statut_id,
-  type = "victime",
+  qualiteStatuts,
 }: {
   statut_id: number;
-  type?: "victime" | "temoin";
+  qualiteStatuts: any[];
 }) {
-  if (type === "temoin") {
-    if (statut_id === STATUT_ID.VERIFIE)
-      return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 font-medium">
-          ✔ Vérifié
-        </span>
-      );
-    if (statut_id === STATUT_ID.NON_FIABLE)
-      return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 font-medium">
-          ✗ Non fiable
-        </span>
-      );
-    return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 font-medium">
-        🟡 À vérifier
-      </span>
-    );
-  }
+  const s = qualiteStatuts.find(x => x.id === statut_id);
+  if (!s) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">Statut #{statut_id}</span>;
 
-  if (statut_id === STATUT_ID.VERIFIE)
-    return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white text-gray-700 border border-gray-200 font-medium dark:bg-zinc-800 dark:text-gray-300">
-        ✔ Avéré
-      </span>
-    );
-  if (statut_id === STATUT_ID.NON_FIABLE)
-    return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 font-medium">
-        ✗ Non fiable
-      </span>
-    );
+  const color = s.couleur_hex || '#666';
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 font-medium">
-      🟡 À vérifier
+    <span
+      className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium"
+      style={{
+        borderColor: color + '50',
+        color: color,
+        backgroundColor: color + '15'
+      }}
+    >
+      {s.libelle}
     </span>
   );
 }
 
-const VICTIME_OPTIONS = [
-  { value: STATUT_ID.A_VERIFIER, label: "🟡 À vérifier" },
-  { value: STATUT_ID.VERIFIE, label: "✔ Avéré" },
-  { value: STATUT_ID.NON_FIABLE, label: "✗ Non fiable" },
-];
-
-const TEMOIN_OPTIONS = [
-  { value: STATUT_ID.A_VERIFIER, label: "🟡 À vérifier" },
-  { value: STATUT_ID.VERIFIE, label: "✔ Vérifié" },
-  { value: STATUT_ID.NON_FIABLE, label: "✗ Non fiable" },
-];
-
-const GENERIC_OPTIONS = VICTIME_OPTIONS;
+/** Icon for a fragment type_id */
 
 // FIX : un seul composant StatutSelect (le doublon causait l'erreur de compilation)
 function StatutSelect({
@@ -187,6 +156,8 @@ export function DossiersPanel({
   setParcours,
   setFragments,
   onRefresh,
+  qualiteStatuts,
+  typeFragments,
 }: DossiersPanelProps) {
   const [search, setSearch] = useState("");
   const [filterStatut, setFilterStatut] = useState<StatutFilter>("tous");
@@ -195,7 +166,7 @@ export function DossiersPanel({
   
   // Detail Dialog State
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailType, setDetailType] = useState<'victime' | 'temoin' | 'fragment'>('victime');
+  const [detailType, setDetailType] = useState<'victime' | 'temoin' | 'fragment' | 'parcours' | 'source'>('victime');
   const [detailData, setDetailData] = useState<any>(null);
 
   const toggleTemoin = (id: number) =>
@@ -214,7 +185,7 @@ export function DossiersPanel({
       return next;
     });
 
-  const handleOpenDetail = (type: 'victime' | 'temoin' | 'fragment', data: any) => {
+  const handleOpenDetail = (type: 'victime' | 'temoin' | 'fragment' | 'parcours' | 'source', data: any) => {
     setDetailType(type);
     setDetailData(data);
     setDetailOpen(true);
@@ -406,7 +377,7 @@ export function DossiersPanel({
                   <span className="font-semibold text-sm text-foreground">
                     {t.prenom} {t.nom}
                   </span>
-                  <StatutBadge statut_id={normalizeStatutId(t.statut_id)} type="temoin" />
+                  <StatutBadge statut_id={normalizeStatutId(t.statut_id)} qualiteStatuts={qualiteStatuts} />
                   <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                     {myVictimes.length} victime{myVictimes.length > 1 ? "s" : ""}
                   </span>
@@ -423,7 +394,7 @@ export function DossiersPanel({
                 </Button>
                 <StatutSelect
                   value={normalizeStatutId(t.statut_id)}
-                  options={TEMOIN_OPTIONS}
+                  options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
                   onChange={(val) => handleStatus("mmrl_temoins", t.id, val)}
                 />
                 <Button
@@ -456,7 +427,7 @@ export function DossiersPanel({
                         </span>
                         <div className="flex-1 font-semibold text-sm">
                           {v.prenom} <span className="uppercase">{v.nom}</span>
-                          <StatutBadge statut_id={normalizeStatutId(v.statut_id)} />
+                          <StatutBadge statut_id={normalizeStatutId(v.statut_id)} qualiteStatuts={qualiteStatuts} />
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <Button
@@ -467,12 +438,27 @@ export function DossiersPanel({
                           >
                             <Eye size={13} />
                           </Button>
+                          {v.source_id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => {
+                                const s = sources.find(src => src.id === getId(v.source_id));
+                                if (s) handleOpenDetail('source', s);
+                                else toast.error("Source introuvable");
+                              }}
+                              title="Voir la source du témoignage"
+                            >
+                              <FileText size={13} />
+                            </Button>
+                          )}
                           <StatutSelect
                             value={normalizeStatutId(v.statut_id)}
-                            options={VICTIME_OPTIONS}
+                            options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
                             onChange={(val) => handleStatus("mmrl_victimes", v.id, val)}
                           />
-                          <AddVictimeDialog editVictime={v} onSuccess={onRefresh} triggerVariant="ghost" />
+                          <AddVictimeDialog editVictime={v} onSuccess={onRefresh} triggerVariant="ghost" statuses={qualiteStatuts} />
                           <Button
                             variant="ghost"
                             size="icon"
@@ -498,9 +484,17 @@ export function DossiersPanel({
                                 >
                                   <span className="text-xs">{p.titre || p.description}</span>
                                   <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground"
+                                      onClick={() => handleOpenDetail('parcours', p)}
+                                    >
+                                      <Eye size={12} />
+                                    </Button>
                                     <StatutSelect
                                       value={normalizeStatutId(p.statut_id)}
-                                      options={GENERIC_OPTIONS}
+                                      options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
                                       onChange={(val) => handleStatus("mmrl_parcours", p.id, val)}
                                     />
                                     <Button
@@ -521,11 +515,13 @@ export function DossiersPanel({
                               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
                                 <Puzzle size={10} /> Fragments
                               </p>
-                              <AddFragmentDialog 
-                                victimeId={v.id} 
-                                auteurTemoinId={getId(v.auteur_temoin_id)} 
-                                onSuccess={onRefresh} 
-                              />
+                                <AddFragmentDialog 
+                                  victimeId={v.id} 
+                                  auteurTemoinId={getId(v.auteur_temoin_id)} 
+                                  onSuccess={onRefresh} 
+                                  qualiteStatuts={qualiteStatuts}
+                                  typeFragments={typeFragments}
+                                />
                             </div>
                             {vicFragments.length === 0 && (
                               <p className="text-[10px] text-muted-foreground italic pl-4">Aucun fragment.</p>
@@ -552,9 +548,17 @@ export function DossiersPanel({
                                   </Button>
                                   <StatutSelect
                                     value={normalizeStatutId(f.statut_id)}
-                                    options={GENERIC_OPTIONS}
+                                    options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
                                     onChange={(val) => handleStatus("mmrl_fragments", f.id, val)}
                                   />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground"
+                                    onClick={() => handleOpenDetail('fragment', f)}
+                                  >
+                                    <Eye size={12} />
+                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="icon"

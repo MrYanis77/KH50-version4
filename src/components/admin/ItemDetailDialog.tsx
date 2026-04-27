@@ -15,14 +15,32 @@ interface ItemDetailDialogProps {
   onClose: () => void;
   type: 'victime' | 'temoin' | 'fragment' | 'parcours' | 'source';
   data: any;
+  qualiteStatuts?: any[];
 }
 
 const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL as string;
 
-export function ItemDetailDialog({ isOpen, onClose, type, data }: ItemDetailDialogProps) {
+export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts }: ItemDetailDialogProps) {
   if (!data) return null;
 
   const getStatusBadge = (statut_id: number) => {
+    if (qualiteStatuts) {
+      const s = qualiteStatuts.find(x => x.id === statut_id);
+      if (s) {
+        return (
+          <Badge 
+            style={{ 
+              backgroundColor: (s.couleur_hex || '#aaa') + '20', 
+              color: s.couleur_hex || '#666',
+              borderColor: (s.couleur_hex || '#aaa') + '40'
+            }}
+            className="border"
+          >
+            {s.libelle}
+          </Badge>
+        );
+      }
+    }
     switch (statut_id) {
       case 1: return <Badge className="bg-green-100 text-green-700 border-green-200">✔ Avéré / Vérifié</Badge>;
       case 3: return <Badge className="bg-red-100 text-red-700 border-red-200">✗ Non fiable</Badge>;
@@ -87,6 +105,8 @@ export function ItemDetailDialog({ isOpen, onClose, type, data }: ItemDetailDial
           Créé le : {v.date_creation ? format(new Date(v.date_creation), 'PPp', { locale: fr }) : "Inconnu"}
         </div>
       </div>
+
+      {renderRawData(v)}
     </div>
   );
 
@@ -126,6 +146,8 @@ export function ItemDetailDialog({ isOpen, onClose, type, data }: ItemDetailDial
           Dernière modif : {t.date_modification ? format(new Date(t.date_modification), 'PPp', { locale: fr }) : "N/A"}
         </div>
       </div>
+
+      {renderRawData(t)}
     </div>
   );
 
@@ -195,6 +217,92 @@ export function ItemDetailDialog({ isOpen, onClose, type, data }: ItemDetailDial
           Auteur (Témoin ID): {f.auteur_temoin_id}
         </div>
       </div>
+
+      {renderRawData(f)}
+    </div>
+  );
+
+  const renderParcours = (p: any) => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+            <Clock size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">{p.titre || "Étape de parcours"}</h2>
+            <p className="text-xs text-muted-foreground">Année: {p.annee_evenement || "Inconnue"}</p>
+          </div>
+        </div>
+        {getStatusBadge(p.statut_id)}
+      </div>
+      <div className="p-4 bg-muted/20 rounded-lg border border-border/50 text-sm italic">
+        {p.description || "Pas de description."}
+      </div>
+      {renderRawData(p)}
+    </div>
+  );
+
+  const renderSource = (s: any) => (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center border border-blue-200">
+          <FileText className="h-8 w-8 text-blue-600" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold">{s.prenom} {s.nom}</h2>
+          <div className="flex items-center gap-2 mt-1">
+            {getStatusBadge(s.statut_id)}
+            <Badge variant="outline">Source de l'information</Badge>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-3 border rounded-lg">
+          <p className="text-xs text-muted-foreground">Email</p>
+          <p className="text-sm font-medium">{s.email || "—"}</p>
+        </div>
+        <div className="p-3 border rounded-lg">
+          <p className="text-xs text-muted-foreground">Téléphone</p>
+          <p className="text-sm font-medium">{s.telephone || "—"}</p>
+        </div>
+      </div>
+      {renderRawData(s)}
+    </div>
+  );
+
+  const renderRawData = (obj: any) => (
+    <div className="mt-8 pt-6 border-t border-border">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+          <Hash size={10} /> Métadonnées & Données brutes
+        </h3>
+        <Badge variant="outline" className="text-[9px] font-mono opacity-50 uppercase tracking-tighter">Raw Output</Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/10 p-3 rounded-lg border border-border/40">
+        {Object.entries(obj)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value]) => {
+            if (value === null || value === undefined) return null;
+            if (Array.isArray(value)) return null;
+            
+            let displayValue = "";
+            if (typeof value === 'object') {
+              displayValue = (value as any).libelle || (value as any).id || "[Object]";
+            } else {
+              displayValue = String(value);
+            }
+
+            if (displayValue.length > 250) return null; // Skip long content already shown
+
+            return (
+              <div key={key} className="flex flex-col p-2 rounded bg-background/40 border border-border/20 group hover:border-primary/20 transition-colors">
+                <span className="text-[9px] font-mono text-muted-foreground uppercase mb-0.5 opacity-70">{key}</span>
+                <span className="text-xs font-medium text-foreground/90 truncate" title={displayValue}>{displayValue}</span>
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 
@@ -214,6 +322,8 @@ export function ItemDetailDialog({ isOpen, onClose, type, data }: ItemDetailDial
         {type === 'victime' && renderVictime(data)}
         {type === 'temoin' && renderTemoin(data)}
         {type === 'fragment' && renderFragment(data)}
+        {type === 'parcours' && renderParcours(data)}
+        {type === 'source' && renderSource(data)}
         
         <div className="flex justify-end mt-8">
           <Button variant="secondary" onClick={onClose}>Fermer</Button>
