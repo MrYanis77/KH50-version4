@@ -16,11 +16,14 @@ interface ItemDetailDialogProps {
   type: 'victime' | 'temoin' | 'fragment' | 'parcours' | 'source';
   data: any;
   qualiteStatuts?: any[];
+  victimes?: any[];
+  temoins?: any[];
+  sources?: any[];
 }
 
 const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL as string;
 
-export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts }: ItemDetailDialogProps) {
+export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, victimes, temoins, sources }: ItemDetailDialogProps) {
   if (!data) return null;
 
   const getStatusBadge = (statut_id: number) => {
@@ -153,17 +156,25 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts }
 
   const renderFragment = (f: any) => (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            {f.type_id === 2 ? <ImageIcon size={20} /> : f.type_id === 3 ? <Video size={20} /> : f.type_id === 7 ? <Mic size={20} /> : <FileText size={20} />}
+      <div className="flex items-center justify-between pb-4 border-b">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-primary/10 text-primary shadow-sm">
+            {f.type_id === 2 ? <ImageIcon size={24} /> : 
+             f.type_id === 3 ? <Video size={24} /> : 
+             f.type_id === 7 ? <Mic size={24} /> : 
+             <FileText size={24} />}
           </div>
           <div>
-            <h2 className="text-xl font-bold">{f.titre || "Fragment sans titre"}</h2>
-            <p className="text-xs text-muted-foreground">Type: {f.type?.libelle || "Inconnu"}</p>
+            <h2 className="text-2xl font-bold text-foreground">{f.titre || "Fragment de mémoire"}</h2>
+            <p className="text-sm font-medium text-primary">
+              {f.type?.libelle || (f.type_id === 2 ? "Photographie" : f.type_id === 3 ? "Vidéo" : f.type_id === 7 ? "Audio" : "Document / Récit")}
+            </p>
           </div>
         </div>
-        {getStatusBadge(f.statut_id)}
+        <div className="flex flex-col items-end gap-2">
+          {getStatusBadge(f.statut_id)}
+          <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">ID #{f.id}</span>
+        </div>
       </div>
 
       {f.fichier_media && (
@@ -200,21 +211,85 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts }
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Calendar size={14} /> 
-          <span>Année : {f.annee_fragment || "Non précisée"}</span>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm space-y-1">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
+            <Calendar size={10} /> Temporel
+          </p>
+          <p className="text-sm">
+            <span className="text-muted-foreground mr-1">Année :</span> 
+            <span className="font-medium">{f.annee_fragment || "—"}</span>
+          </p>
+          <p className="text-sm">
+            <span className="text-muted-foreground mr-1">Date :</span> 
+            <span className="font-medium">{f.date_fragment || "—"}</span>
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Clock size={14} /> 
-          <span>Date : {f.date_fragment || "Non précisée"}</span>
+
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm space-y-1">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5">
+            <User size={10} /> Attributions
+          </p>
+          <div className="text-sm flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">Victime :</span>
+              <span className="font-medium truncate">
+                {victimes?.find(v => v.id === f.victime_id) 
+                  ? `${victimes.find(v => v.id === f.victime_id).prenom} ${victimes.find(v => v.id === f.victime_id).nom}`
+                  : `ID #${f.victime_id}`}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">Auteur :</span>
+              <span className="font-medium truncate">
+                {temoins?.find(t => t.id === f.auteur_temoin_id)
+                  ? `${temoins.find(t => t.id === f.auteur_temoin_id).prenom} ${temoins.find(t => t.id === f.auteur_temoin_id).nom}`
+                  : `ID #${f.auteur_temoin_id}`}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50 text-[10px] text-muted-foreground">
-        <div>ID: {f.id} | Victime ID: {f.victime_id}</div>
-        <div className="text-right">
-          Auteur (Témoin ID): {f.auteur_temoin_id}
+      {f.source_id && (
+        <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-3.5 w-3.5 text-blue-600" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Source du témoignage</span>
+          </div>
+          <p className="text-sm font-medium">
+            {sources?.find(s => s.id === f.source_id)
+              ? `${sources.find(s => s.id === f.source_id).prenom} ${sources.find(s => s.id === f.source_id).nom}`
+              : `Source ID #${f.source_id}`}
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50 text-xs text-muted-foreground">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1">
+            <span className="font-semibold">Victime :</span> 
+            {victimes?.find(v => v.id === data.victime_id) 
+              ? `${victimes.find(v => v.id === data.victime_id).prenom} ${victimes.find(v => v.id === data.victime_id).nom}`
+              : `ID #${data.victime_id}`}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="font-semibold">Auteur :</span>
+            {temoins?.find(t => t.id === data.auteur_temoin_id)
+              ? `${temoins.find(t => t.id === data.auteur_temoin_id).prenom} ${temoins.find(t => t.id === data.auteur_temoin_id).nom}`
+              : `ID #${data.auteur_temoin_id}`}
+          </div>
+        </div>
+        <div className="space-y-1 text-right">
+          {data.source_id && (
+            <div className="flex items-center justify-end gap-1">
+              <span className="font-semibold">Source :</span>
+              {sources?.find(s => s.id === data.source_id)
+                ? `${sources.find(s => s.id === data.source_id).prenom} ${sources.find(s => s.id === data.source_id).nom}`
+                : `ID #${data.source_id}`}
+            </div>
+          )}
+          <div>Fragment ID: {data.id}</div>
         </div>
       </div>
 
@@ -224,21 +299,62 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts }
 
   const renderParcours = (p: any) => (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
-            <Clock size={20} />
+      <div className="flex items-center justify-between pb-4 border-b">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-orange-100 text-orange-600 shadow-sm">
+            <Clock size={24} />
           </div>
           <div>
-            <h2 className="text-xl font-bold">{p.titre || "Étape de parcours"}</h2>
-            <p className="text-xs text-muted-foreground">Année: {p.annee_evenement || "Inconnue"}</p>
+            <h2 className="text-2xl font-bold">{p.titre || "Étape de parcours"}</h2>
+            <p className="text-sm font-medium text-orange-600">Ligne de temps historique</p>
           </div>
         </div>
-        {getStatusBadge(p.statut_id)}
+        <div className="flex flex-col items-end gap-2">
+          {getStatusBadge(p.statut_id)}
+          <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">ID #{p.id}</span>
+        </div>
       </div>
-      <div className="p-4 bg-muted/20 rounded-lg border border-border/50 text-sm italic">
-        {p.description || "Pas de description."}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5 mb-2">
+            <Calendar size={10} /> Période
+          </p>
+          <p className="text-sm font-medium">{p.annee_evenement || "Année non précisée"}</p>
+          {p.date_evenement && <p className="text-xs text-muted-foreground mt-1">{p.date_evenement}</p>}
+        </div>
+        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold flex items-center gap-1.5 mb-2">
+            <User size={10} /> Dossier lié
+          </p>
+          <p className="text-sm font-medium">
+            {victimes?.find(v => v.id === p.victime_id) 
+              ? `${victimes.find(v => v.id === p.victime_id).prenom} ${victimes.find(v => v.id === p.victime_id).nom}`
+              : `Victime ID #${p.victime_id}`}
+          </p>
+        </div>
       </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">Description de l'événement</h3>
+        <div className="text-sm leading-relaxed p-4 bg-muted/20 rounded-lg border border-border/50 italic">
+          {p.description || "Aucune description fournie."}
+        </div>
+      </div>
+
+      {p.fichier_media && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">Document joint</h3>
+          <div className="rounded-xl overflow-hidden border border-border bg-black/5 flex items-center justify-center min-h-[150px]">
+             <img 
+               src={`${DIRECTUS_URL}/assets/${p.fichier_media}`} 
+               alt="Preuve parcours" 
+               className="max-w-full max-h-[300px] object-contain"
+             />
+          </div>
+        </div>
+      )}
+
       {renderRawData(p)}
     </div>
   );

@@ -96,7 +96,7 @@
   }
 
   body {
-  @apply font-body bg-background text-foreground antialiased;
+  @apply font-body bg-background text-foreground antialiased transition-colors duration-300;
   font-size: 18px;
   line-height: 1.6;
   word-break: break-word;

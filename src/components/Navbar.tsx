@@ -50,8 +50,6 @@ const Navbar = () => {
               Fragments #KH50
             </span>
           </Link>
-
-          <ThemeToggle />
         </div>
 
         <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">
@@ -78,6 +76,8 @@ const Navbar = () => {
               Admin
             </Link>
           )}
+
+          <ThemeToggle />
 
           <button
             onClick={handleAuth}
@@ -112,7 +112,8 @@ const Navbar = () => {
               </NavLink>
             ))}
 
-            <div className="pt-2">
+            <div className="flex items-center justify-between py-2 border-y border-border/50">
+              <span className="text-sm font-medium text-foreground">Mode Sombre</span>
               <ThemeToggle />
             </div>
 

@@ -1,5 +1,6 @@
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const ThemeToggle = () => {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -33,11 +34,26 @@ const ThemeToggle = () => {
   return (
     <button
       onClick={toggleTheme}
-      className="inline-flex items-center justify-center rounded-full p-2 text-foreground hover:bg-accent transition-colors"
+      className="relative inline-flex items-center justify-center rounded-full w-10 h-10 text-foreground hover:bg-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label="Changer de thème"
       title="Changer de thème"
     >
-      {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={theme}
+          initial={{ y: -20, opacity: 0, rotate: -90 }}
+          animate={{ y: 0, opacity: 1, rotate: 0 }}
+          exit={{ y: 20, opacity: 0, rotate: 90 }}
+          transition={{ duration: 0.2, ease: "easeInOut" }}
+          className="flex items-center justify-center"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-[1.2rem] w-[1.2rem] transition-all" />
+          ) : (
+            <Moon className="h-[1.2rem] w-[1.2rem] transition-all" />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </button>
   );
 };

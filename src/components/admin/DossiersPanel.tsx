@@ -554,14 +554,6 @@ export function DossiersPanel({
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 text-muted-foreground"
-                                    onClick={() => handleOpenDetail('fragment', f)}
-                                  >
-                                    <Eye size={12} />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
                                     className="h-7 w-7 text-destructive"
                                     onClick={() => handleDelete("mmrl_fragments", f.id, setFragments)}
                                   >
@@ -587,6 +579,10 @@ export function DossiersPanel({
         onClose={() => setDetailOpen(false)} 
         type={detailType} 
         data={detailData} 
+        qualiteStatuts={qualiteStatuts}
+        victimes={victimes}
+        temoins={temoins}
+        sources={sources}
       />
     </div>
   );
