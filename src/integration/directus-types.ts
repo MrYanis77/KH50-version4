@@ -1,61 +1,150 @@
+// =============================================================================
+//  MEMORIAL — Directus Types v4.2
+//  Corrections :
+//    • TypeFragmentRow.code : ajout 'audio'
+//    • TYPE_FRAGMENT_ID : AUDIO = 7 aligné avec le schéma SQL
+// =============================================================================
+
 export interface DirectusSchema {
-  memorial_temoins: TemoinRow[];
-  memorial_victimes: VictimeRow[];
-  memorial_parcours: ParcoursRow[];
-  memorial_fragments: FragmentRow[];
+  mmrl_qualite_statut: QualiteStatutRow[];
+  mmrl_type_fragment: TypeFragmentRow[];
+  mmrl_temoins: TemoinRow[];
+  mmrl_sources_temoignage: SourceTemoignageRow[];
+  mmrl_victimes: VictimeRow[];
+  mmrl_parcours: ParcoursRow[];
+  mmrl_fragments: FragmentRow[];
   directus_files: DirectusFilesRow[];
   directus_users: DirectusUsersRow[];
 }
 
+// ── Lookup tables ─────────────────────────────────────────────────────────────
+
+/** mmrl_qualite_statut — id: 1=verifie, 2=a_verifier, 3=non_fiable */
+export interface QualiteStatutRow {
+  id: number;
+  code: 'verifie' | 'a_verifier' | 'non_fiable';
+  libelle: string;
+  couleur_hex: string;
+}
+
+/**
+ * mmrl_type_fragment
+ * id: 1=temoignage, 2=photographie, 3=video, 4=recit, 5=document, 6=lieu, 7=audio
+ */
+export interface TypeFragmentRow {
+  id: number;
+  code: 'temoignage' | 'photographie' | 'video' | 'recit' | 'document' | 'lieu' | 'audio';
+  libelle: string;
+}
+
+// ── Core tables ───────────────────────────────────────────────────────────────
+
+/** mmrl_temoins — utilisateur enregistré (lié à directus_users) */
 export interface TemoinRow {
   id: number;
-  directus_user_id?: string;
-  nom: string;
+  directus_user_id: string;
   prenom: string;
-  email: string;
+  nom: string;
+  email?: string;
   telephone?: string;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  /** Joined field (optional, depends on query) */
+  statut?: QualiteStatutRow;
   date_creation?: string;
-  statut: string;
+  date_modification?: string;
+  deleted_at?: string | null;
 }
 
+/** mmrl_sources_temoignage — source d'un témoignage (peut ou non avoir de compte) */
+export interface SourceTemoignageRow {
+  id: number;
+  /** Nullable : une source sans compte Directus a source_user_id = null */
+  source_user_id?: string | null;
+  prenom: string;
+  nom: string;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}
+
+/** mmrl_victimes */
 export interface VictimeRow {
   id: number;
-  temoin_id: number;
+  /** FK → mmrl_temoins.id  (utilisateur qui a ajouté la fiche) */
+  auteur_temoin_id: number;
+  /** FK → mmrl_sources_temoignage.id  (source de l'information) */
+  source_id: number;
   prenom: string;
   nom: string;
-  sexe?: string;
-  date_naissance?: string;
-  lieu_naissance?: string;
-  date_deces?: string;
-  lieu_deces?: string;
-  profession?: string;
-  origine_familiale?: string;
-  photo_principale?: string; // ID directus_files
-  statut: "brouillon" | "publie" | "archive";
+  /** 0=inconnu, 1=masculin, 2=féminin */
+  sexe?: number | null;
+  annee_naissance?: number | null;
+  date_naissance?: string | null;
+  lieu_naissance?: string | null;
+  annee_deces?: number | null;
+  date_deces?: string | null;
+  lieu_deces?: string | null;
+  profession?: string | null;
+  origine_familiale?: string | null;
+  /** FK → directus_files.id */
+  photo_principale?: string | null;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
   date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
 }
 
+/** mmrl_parcours */
 export interface ParcoursRow {
   id: number;
   victime_id: number;
-  annee?: string;
-  description?: string;
-  fichier_media?: string; // ID directus_files
-  ordre?: number;
-  statut?: 'valide' | 'en_attente';
+  annee_evenement?: number | null;
+  date_evenement?: string | null;
+  titre?: string | null;
+  description?: string | null;
+  /** FK → directus_files.id */
+  fichier_media?: string | null;
+  ordre: number;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
 }
 
+/** mmrl_fragments */
 export interface FragmentRow {
   id: number;
   victime_id: number;
-  auteur: string;
-  date_fragment?: string;
-  type_fragment: 'temoignage' | 'photographie' | 'video' | 'recit' | 'document' | 'lieu';
+  /** FK → mmrl_temoins.id */
+  auteur_temoin_id: number;
+  /** FK → mmrl_sources_temoignage.id (nullable) */
+  source_id?: number | null;
+  /** FK → mmrl_type_fragment.id  (default 1 = temoignage) */
+  type_id: number;
+  type?: TypeFragmentRow;
+  titre?: string | null;
   description: string;
-  fichier_media?: string; // ID directus_files
-  statut: 'valide' | 'en_attente';
+  annee_fragment?: number | null;
+  date_fragment?: string | null;
+  /** FK → directus_files.id */
+  fichier_media?: string | null;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
   date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
 }
+
+// ── Directus system tables ────────────────────────────────────────────────────
 
 export interface DirectusFilesRow {
   id: string;
@@ -76,7 +165,7 @@ export interface DirectusFilesRow {
   description?: string;
   location?: string;
   tags?: string[];
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface DirectusUsersRow {
@@ -100,6 +189,37 @@ export interface DirectusUsersRow {
   last_page?: string;
   provider: string;
   external_identifier?: string;
-  auth_data?: any;
+  auth_data?: Record<string, unknown>;
   email_notifications?: boolean;
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Statut IDs as constants for convenience */
+export const STATUT_ID = {
+  VERIFIE: 1,
+  A_VERIFIER: 2,
+  NON_FIABLE: 3,
+} as const;
+
+/** Type fragment IDs as constants — alignés avec mmrl_type_fragment SQL */
+export const TYPE_FRAGMENT_ID = {
+  TEMOIGNAGE: 1,
+  PHOTOGRAPHIE: 2,
+  VIDEO: 3,
+  RECIT: 4,
+  DOCUMENT: 5,
+  LIEU: 6,
+  AUDIO: 7,
+} as const;
+
+export type TypeFragmentCode =
+  | 'temoignage'
+  | 'photographie'
+  | 'video'
+  | 'recit'
+  | 'document'
+  | 'lieu'
+  | 'audio';
+
+export type QualiteCode = 'verifie' | 'a_verifier' | 'non_fiable';

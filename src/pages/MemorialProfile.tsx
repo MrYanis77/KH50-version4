@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned } from "lucide-react";
+import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned, Pencil } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useMemorialPerson } from "@/hooks/useDirectus";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -11,10 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { directus } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { AddInformationDialog } from "@/components/AddInformationDialog";
+
 
 const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } };
 
@@ -39,19 +43,15 @@ const fragmentTypeIcons: Record<string, React.ReactNode> = {
 const MemorialProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { person, fragments, parcours, loading, error } = useMemorialPerson(Number(id));
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
   const [showContributeForm, setShowContributeForm] = useState(false);
   const [showParcoursForm, setShowParcoursForm] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fragmentForm, setFragmentForm] = useState({
-    type_fragment: "temoignage",
-    description: "",
-    auteur: "",
-    date_fragment: "",
-  });
   const [fragmentFile, setFragmentFile] = useState<File | null>(null);
 
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [parcoursForm, setParcoursForm] = useState({
     annee: "",
     description: "",
@@ -65,46 +65,8 @@ const MemorialProfile = () => {
     }
   };
 
-  const handleSubmitFragment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fragmentForm.description || !fragmentForm.auteur) {
-      toast.error("Veuillez remplir la description et l'auteur.");
-      return;
-    }
+  // Fragments are now handled by AddInformationDialog component
 
-    setIsSubmitting(true);
-    try {
-      let mediaId: string | null = null;
-      if (fragmentFile) {
-        const formData = new FormData();
-        formData.append("file", fragmentFile);
-        const uploadResult = await directus.request(uploadFiles(formData));
-        mediaId = (uploadResult as any).id;
-      }
-
-      await directus.request(
-        createItem("memorial_fragments", {
-          victime_id: Number(id),
-          auteur: fragmentForm.auteur,
-          description: fragmentForm.description,
-          type_fragment: fragmentForm.type_fragment as any,
-          date_fragment: fragmentForm.date_fragment || null,
-          fichier_media: mediaId,
-          statut: "en_attente",
-        })
-      );
-
-      toast.success("Votre fragment a été envoyé et sera validé prochainement.");
-      setShowContributeForm(false);
-      setFragmentForm({ type_fragment: "temoignage", description: "", auteur: "", date_fragment: "" });
-      setFragmentFile(null);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Une erreur est survenue : " + (err.message || "Erreur inconnue"));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleSubmitParcours = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,13 +86,13 @@ const MemorialProfile = () => {
       }
 
       await directus.request(
-        createItem("memorial_parcours", {
+        createItem("mmrl_parcours" as any, {
           victime_id: Number(id),
-          annee: parcoursForm.annee,
+          annee_evenement: parcoursForm.annee ? Number(parcoursForm.annee) : null,
           description: parcoursForm.description,
           fichier_media: mediaId,
           ordre: 0,
-          statut: "en_attente",
+          statut_id: 2, // a_verifier
         })
       );
 
@@ -165,7 +127,8 @@ const MemorialProfile = () => {
     );
   }
 
-  if (person.statut !== "publie") {
+  // statut_id: 1=verifie, 2=a_verifier, 3=non_fiable
+  if (person.statut_id !== 1) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center space-y-4 max-w-lg p-8 border border-border rounded-xl bg-card shadow-sm">
@@ -195,12 +158,33 @@ const MemorialProfile = () => {
             <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="border-border text-foreground">
               <ArrowLeft className="h-4 w-4 mr-1" /> Retour
             </Button>
-            <Button size="sm" onClick={() => setShowParcoursForm(true)} variant="outline" className="text-foreground border-border">
-              <Plus className="h-4 w-4 mr-1" /> Ajouter au parcours
-            </Button>
-            <Button size="sm" onClick={() => setShowContributeForm(true)} className="bg-primary text-primary-foreground">
-              <Plus className="h-4 w-4 mr-1" /> Ajouter un fragment
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="bg-primary text-primary-foreground gap-2">
+                    <Pencil className="h-4 w-4" /> Éditer
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 bg-background border-border">
+                  <AddInformationDialog 
+                    victimeId={person.id} 
+                    victimeName={`${person.prenom} ${person.nom}`} 
+                    trigger={
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="gap-2 cursor-pointer font-medium">
+                        <Plus className="h-4 w-4" /> Ajouter un fragment
+                      </DropdownMenuItem>
+                    }
+                  />
+                  <DropdownMenuItem onClick={() => setShowParcoursForm(true)} className="gap-2 cursor-pointer font-medium mt-1">
+                    <Plus className="h-4 w-4" /> Ajouter au parcours
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button size="sm" onClick={() => navigate("/auth")} className="bg-primary text-primary-foreground gap-2">
+                <Pencil className="h-4 w-4" /> Éditer
+              </Button>
+            )}
           </motion.div>
 
           <motion.div variants={fadeUp} className="flex flex-col sm:flex-row items-center sm:items-end gap-8">
@@ -217,8 +201,10 @@ const MemorialProfile = () => {
               <h1 className="font-display text-3xl md:text-4xl text-foreground leading-tight">
                 {person.prenom} <span className="uppercase">{person.nom}</span>
               </h1>
-              {person.date_naissance && person.date_deces && (
-                <p className="text-muted-foreground mt-1 text-lg">{person.date_naissance} — {person.date_deces}</p>
+              {(person.annee_naissance || person.annee_deces || person.date_naissance || person.date_deces) && (
+                <p className="text-muted-foreground mt-1 text-lg">
+                  {person.date_naissance || person.annee_naissance || '?'} — {person.date_deces || person.annee_deces || '?'}
+                </p>
               )}
             </div>
           </motion.div>
@@ -239,11 +225,11 @@ const MemorialProfile = () => {
           </motion.h2>
           <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { icon: <User className="h-4 w-4" />, label: "Sexe", value: person.sexe },
+              { icon: <User className="h-4 w-4" />, label: "Sexe", value: person.sexe != null ? (person.sexe === 1 ? 'Masculin' : person.sexe === 2 ? 'Féminin' : 'Inconnu') : null },
               { icon: <MapPin className="h-4 w-4" />, label: "Lieu de naissance", value: person.lieu_naissance },
-              { icon: <Clock className="h-4 w-4" />, label: "Date de naissance", value: person.date_naissance },
+              { icon: <Clock className="h-4 w-4" />, label: "Date de naissance", value: person.date_naissance || (person.annee_naissance ? String(person.annee_naissance) : null) },
               { icon: <MapPin className="h-4 w-4" />, label: "Lieu de décès", value: person.lieu_deces },
-              { icon: <Clock className="h-4 w-4" />, label: "Date de décès", value: person.date_deces },
+              { icon: <Clock className="h-4 w-4" />, label: "Date de décès", value: person.date_deces || (person.annee_deces ? String(person.annee_deces) : null) },
               { icon: <Briefcase className="h-4 w-4" />, label: "Profession", value: person.profession },
               { icon: <Heart className="h-4 w-4" />, label: "Origine familiale", value: person.origine_familiale },
             ]
@@ -275,14 +261,18 @@ const MemorialProfile = () => {
               Récits & Témoignages
             </motion.h2>
             <div className="space-y-8 mb-12">
-              {fragments.filter(f => ['temoignage', 'recit', 'document'].includes(f.type_fragment)).map((frag) => (
-                <motion.div key={frag.id} variants={fadeUp} className={`bg-card rounded-2xl p-8 border shadow-sm italic text-lg leading-relaxed relative quote-card transition-all ${frag.statut === 'en_attente' ? 'border-border/50 bg-muted/40 blur-[1px] opacity-60' : 'border-border'}`}>
-                   {frag.statut === 'en_attente' && (
-                     <Badge variant="secondary" className="absolute top-2 right-4 text-xs z-20">En attente de validation</Badge>
+              {fragments.filter(f => [1, 4, 5].includes(f.type_id)).map((frag) => (
+                <motion.div key={frag.id} variants={fadeUp} className={`bg-card rounded-2xl p-8 border shadow-sm italic text-lg leading-relaxed relative quote-card transition-all ${
+                  frag.statut_id === 2
+                    ? 'border-yellow-400 bg-yellow-50/60 dark:bg-yellow-900/10'
+                    : 'border-border'
+                }`}>
+                   {frag.statut_id === 2 && (
+                     <Badge className="absolute top-2 right-4 text-xs z-20 bg-yellow-100 text-yellow-800 border border-yellow-300">🟡 Hypothèse - À vérifier</Badge>
                    )}
                    <div className="text-accent/20 absolute top-4 left-4 font-serif text-6xl">"</div>
                    <p className="relative z-10 text-foreground/90 px-4 whitespace-pre-wrap">{frag.description}</p>
-                   <p className="relative z-10 text-sm text-muted-foreground mt-4 text-right">— {frag.auteur} <span className="opacity-60 text-xs ml-2">{frag.date_fragment}</span></p>
+                   <p className="relative z-10 text-sm text-muted-foreground mt-4 text-right">— <span className="opacity-60 text-xs ml-2">{frag.date_fragment || (frag.annee_fragment ? String(frag.annee_fragment) : '')}</span></p>
                 </motion.div>
               ))}
             </div>
@@ -291,22 +281,23 @@ const MemorialProfile = () => {
               Autres Mémoires
             </motion.h2>
             <div className="space-y-4">
-              {fragments.filter(f => !['temoignage', 'recit', 'document'].includes(f.type_fragment)).map((frag) => (
+              {fragments.filter(f => ![1, 4, 5].includes(f.type_id)).map((frag) => (
                 <motion.div
                   key={frag.id}
                   variants={fadeUp}
                   className={`rounded-lg border p-5 transition-all ${
-                    frag.statut === "en_attente"
-                      ? "border-border/50 bg-muted/40 blur-[1px] opacity-60"
+                    frag.statut_id === 2
+                      ? "border-yellow-400 bg-yellow-50/60 dark:bg-yellow-900/10"
                       : "border-border bg-card"
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-accent">{fragmentTypeIcons[frag.type_fragment]}</span>
-                    <Badge variant={frag.statut === "en_attente" ? "secondary" : "default"} className="text-xs">
-                      {frag.statut === "en_attente" ? "En attente de validation" : frag.type_fragment}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground ml-auto">{frag.date_fragment}</span>
+                    {frag.statut_id === 2 ? (
+                      <Badge className="text-xs bg-yellow-100 text-yellow-800 border border-yellow-300">🟡 Hypothèse</Badge>
+                    ) : (
+                      <Badge variant="default" className="text-xs">{frag.type_fragment}</Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground ml-auto">{frag.date_fragment || (frag.annee_fragment ? String(frag.annee_fragment) : '')}</span>
                   </div>
                   <p className="text-foreground leading-relaxed">{frag.description}</p>
                   <p className="text-xs text-muted-foreground mt-2">— {frag.auteur}</p>
@@ -346,7 +337,7 @@ const MemorialProfile = () => {
                   <div className="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-accent border-4 border-background" />
                   <div className="flex flex-col md:flex-row gap-4 md:gap-8">
                     <div className="flex-shrink-0">
-                      <span className="text-xl font-display text-accent font-bold">{item.annee}</span>
+                      <span className="text-xl font-display text-accent font-bold">{item.annee_evenement || item.date_evenement?.slice(0,4)}</span>
                     </div>
                     <div className="flex-grow bg-card rounded-xl p-5 border border-border shadow-sm">
                       <p className="text-foreground leading-relaxed">{item.description}</p>
@@ -383,16 +374,18 @@ const MemorialProfile = () => {
               Galerie Mémoire
             </motion.h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {fragments.filter(f => ['photographie', 'video'].includes(f.type_fragment) && f.fichier_media).map((frag) => (
+              {fragments.filter(f => [2, 3].includes(f.type_id) && f.fichier_media).map((frag) => (
                 <motion.div 
                   key={frag.id} 
                   variants={fadeUp}
                   whileHover={{ scale: 1.02 }}
-                  className={`aspect-square rounded-xl overflow-hidden border bg-muted cursor-pointer shadow-sm hover:shadow-md transition-all relative group ${frag.statut === 'en_attente' ? 'border-border/50 blur-[1px] opacity-60' : 'border-border'}`}
+                  className={`aspect-square rounded-xl overflow-hidden border bg-muted cursor-pointer shadow-sm hover:shadow-md transition-all relative group ${
+                    frag.statut_id === 2 ? 'border-yellow-400' : 'border-border'
+                  }`}
                   onClick={() => setLightboxImg(`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`)}
                 >
-                  {frag.statut === 'en_attente' && (
-                     <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] z-20">En attente</Badge>
+                  {frag.statut_id === 2 && (
+                     <Badge className="absolute top-2 left-2 text-[10px] z-20 bg-yellow-100 text-yellow-800">🟡</Badge>
                   )}
                   <img 
                     src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}?width=400&height=400&fit=cover`} 
@@ -438,84 +431,7 @@ const MemorialProfile = () => {
         )}
       </AnimatePresence>
 
-      {/* Contribute dialog */}
-      <Dialog open={showContributeForm} onOpenChange={setShowContributeForm}>
-        <DialogContent className="bg-background border-border max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl text-foreground">Ajouter un fragment</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Partagez un souvenir, un document ou un témoignage lié à {person.prenom} {person.nom}.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="space-y-4 mt-2"
-            onSubmit={handleSubmitFragment}
-          >
-            <div className="space-y-2">
-              <Label className="text-foreground">Type de contenu</Label>
-              <Select value={fragmentForm.type_fragment} onValueChange={(v) => setFragmentForm(p => ({...p, type_fragment: v}))}>
-                <SelectTrigger className="border-border"><SelectValue placeholder="Choisir un type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="temoignage">Témoignage</SelectItem>
-                  <SelectItem value="photographie">Photographie</SelectItem>
-                  <SelectItem value="video">Vidéo</SelectItem>
-                  <SelectItem value="recit">Récit</SelectItem>
-                  <SelectItem value="document">Document</SelectItem>
-                  <SelectItem value="lieu">Lieu / Objet</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-foreground">Description</Label>
-              <Textarea 
-                placeholder="Décrivez ce fragment de mémoire…" 
-                className="border-border min-h-[100px]" 
-                value={fragmentForm.description}
-                onChange={(e) => setFragmentForm(p => ({...p, description: e.target.value}))}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-foreground">Auteur</Label>
-                <Input 
-                  placeholder="Votre nom" 
-                  className="border-border" 
-                  value={fragmentForm.auteur}
-                  onChange={(e) => setFragmentForm(p => ({...p, auteur: e.target.value}))}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-foreground">Date</Label>
-                <Input 
-                  type="date" 
-                  className="border-border" 
-                  value={fragmentForm.date_fragment}
-                  onChange={(e) => setFragmentForm(p => ({...p, date_fragment: e.target.value}))}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-foreground">Fichier (optionnel)</Label>
-              <Input type="file" className="border-border" accept="image/*,video/*,.pdf,.doc,.docx" onChange={e => handleFileChange(e, 'fragment')} />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setShowContributeForm(false)}>Annuler</Button>
-              <Button type="submit" className="bg-primary text-primary-foreground" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Envoi...
-                  </>
-                ) : (
-                  "Soumettre"
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Fragments are now handled by AddInformationDialog component */}
 
       {/* Parcours dialog */}
       <Dialog open={showParcoursForm} onOpenChange={setShowParcoursForm}>

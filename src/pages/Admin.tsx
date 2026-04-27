@@ -12,112 +12,177 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Shield, Plus, Pencil, Trash2, User, Users, Image as ImageIcon, Check, Loader2, MessageSquare, History, GalleryVertical, Puzzle, RefreshCcw, AlertTriangle } from "lucide-react";
+import {
+  Shield, Plus, Pencil, Trash2, Image as ImageIcon,
+  Check, Loader2, GalleryVertical, Puzzle, RefreshCcw,
+  AlertTriangle, Eye, Settings2, Users
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow } from "@/integration/directus-types";
+import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow, SourceTemoignageRow } from "@/integration/directus-types";
+import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { CsvImporter } from "@/components/admin/CsvImporter";
+import { MultiInsertDialog } from "@/components/admin/MultiInsertDialog";
+import AddVictimeDialog from "@/components/AddVictimeDialog";
+import { DossiersPanel } from "@/components/admin/DossiersPanel";
+import { LookupsPanel } from "@/components/admin/LookupsPanel";
+import { UsersPanel } from "@/components/admin/UsersPanel";
 
 const Admin = () => {
-  const { 
-    victimes, temoins, parcours, fragments, 
+  const {
+    victimes, temoins, sources, parcours, fragments, qualiteStatuts, typeFragments,
     loading, error, collectionErrors, refreshAction,
-    setVictimes, setTemoins, setParcours, setFragments 
+    setVictimes, setTemoins, setSources, setParcours, setFragments,
   } = useAdminData();
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingVictime, setEditingVictime] = useState<Partial<VictimeRow> | null>(null);
-  const [editingTemoin, setEditingTemoin] = useState<Partial<TemoinRow> | null>(null);
+  const [activeTab, setActiveTab] = useState("dossiers");
   const [editingFragment, setEditingFragment] = useState<Partial<FragmentRow> | null>(null);
-  const [editingParcours, setEditingParcours] = useState<Partial<ParcoursRow> | null>(null);
-  
-  const [isVictimeDialogOpen, setIsVictimeDialogOpen] = useState(false);
-  const [isTemoinDialogOpen, setIsTemoinDialogOpen] = useState(false);
   const [isFragmentDialogOpen, setIsFragmentDialogOpen] = useState(false);
-  const [isParcoursDialogOpen, setIsParcoursDialogOpen] = useState(false);
+  const [viewingItem, setViewingItem] = useState<{ type: string; data: any } | null>(null);
+
+  const handleOpenItem = (type: string, id: number) => {
+    let collection: any[] = [];
+    if (type === 'victime') collection = victimes;
+    else if (type === 'temoin') collection = temoins;
+    else if (type === 'fragment') collection = fragments;
+    else if (type === 'parcours') collection = parcours;
+    else if (type === 'source') collection = sources;
+
+    const item = collection.find(x => x.id === id);
+    if (item) {
+      setViewingItem({ type, data: item });
+    }
+  };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>;
   if (error) return <div className="p-8 text-destructive text-center">Erreur: {error}</div>;
 
-  const getVictimeName = (id: number) => {
-    const v = victimes.find(v => v.id === id);
-    return v ? `${v.prenom} ${v.nom}` : `ID: ${id}`;
+  // ── Helpers ──
+  const getId = (val: any): number => {
+    if (val == null) return 0;
+    if (typeof val === 'object' && val.id !== undefined) return Number(val.id);
+    return Number(val);
   };
 
-  const getTemoinNameForVictime = (victimeId: number) => {
-    const v = victimes.find(v => v.id === victimeId);
-    if (!v) return "-";
-    const t = temoins.find(t => t.id === v.temoin_id);
-    return t ? `${t.prenom} ${t.nom}` : `Témoin ID: ${v.temoin_id}`;
+  const getVictimeName = (id: any) => {
+    const vid = getId(id);
+    const v = victimes.find(v => v.id === vid);
+    return v ? `${v.prenom} ${v.nom}` : `ID: ${vid}`;
   };
 
-  // --- ACTIONS ---
-  const handleSaveVictime = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVictime) return;
-    
-    if (!editingVictime.prenom || !editingVictime.nom || !editingVictime.temoin_id) {
-      toast.error("Le prénom, le nom et le témoin source sont obligatoires.");
-      return;
+  const getTemoinName = (id: any) => {
+    const tid = getId(id);
+    const t = temoins.find(t => t.id === tid);
+    return t ? `${t.prenom} ${t.nom}` : `Témoin #${tid}`;
+  };
+
+  const getSourceName = (id?: any) => {
+    const sid = getId(id);
+    if (!sid) return "—";
+    const s = sources.find(s => s.id === sid);
+    return s ? `${s.prenom} ${s.nom}` : `Source #${sid}`;
+  };
+
+  const getTypeName = (type_id: any) => {
+    const tid = getId(type_id);
+    const t = typeFragments.find(t => t.id === tid);
+    return t ? t.libelle : `Type #${tid}`;
+  };
+
+  const getStatutBadge = (statut_id: any) => {
+    const sid = getId(statut_id);
+    const qs = qualiteStatuts.find(q => q.id === sid);
+    const color = qs?.couleur_hex || '#aaa';
+    return (
+      <span
+        className="text-xs px-2 py-0.5 rounded-full font-medium border"
+        style={{ borderColor: color, color, backgroundColor: color + '22' }}
+      >
+        {qs?.libelle || `Statut #${statut_id}`}
+      </span>
+    );
+  };
+
+  // ── Inline status change ──
+  const handleQuickStatus = async (
+    collection: 'mmrl_victimes' | 'mmrl_temoins' | 'mmrl_parcours' | 'mmrl_fragments',
+    id: number,
+    newStatutId: number
+  ) => {
+    console.log(`Updating ${collection}#${id} status to ${newStatutId}`);
+    try {
+      // 1. Mise à jour de l'élément cible
+      await directus.request(updateItem(collection as any, id, { statut_id: newStatutId }));
+      
+      // 2. Propagation
+      if (collection === 'mmrl_victimes') {
+        const v = victimes.find(x => x.id === id);
+        const temoinId = v ? getId(v.auteur_temoin_id) : 0;
+        if (temoinId) {
+          await directus.request(updateItem('mmrl_temoins', temoinId, { statut_id: newStatutId }));
+          setTemoins(prev => prev.map(t => t.id === temoinId ? { ...t, statut_id: newStatutId } : t));
+        }
+        setVictimes(prev => prev.map(v => v.id === id ? { ...v, statut_id: newStatutId } : v));
+      } 
+      else if (collection === 'mmrl_temoins') {
+        const linkedVictimes = victimes.filter(v => getId(v.auteur_temoin_id) === id);
+        for (const v of linkedVictimes) {
+          await directus.request(updateItem('mmrl_victimes', v.id, { statut_id: newStatutId }));
+        }
+        setVictimes(prev => prev.map(v => getId(v.auteur_temoin_id) === id ? { ...v, statut_id: newStatutId } : v));
+        setTemoins(prev => prev.map(t => t.id === id ? { ...t, statut_id: newStatutId } : t));
+      }
+      else if (collection === 'mmrl_parcours') {
+        setParcours(prev => prev.map(p => p.id === id ? { ...p, statut_id: newStatutId } : p));
+      }
+      else if (collection === 'mmrl_fragments') {
+        setFragments(prev => prev.map(f => f.id === id ? { ...f, statut_id: newStatutId } : f));
+      }
+      
+      toast.success("Statut mis à jour et propagé avec succès");
+    } catch (err: any) { 
+      console.error("Update failed:", err);
+      toast.error(`Erreur mise à jour : ${err.message || "Problème de permissions"}`); 
     }
-
-    setIsSubmitting(true);
-    try {
-      if (editingVictime.id) {
-        const result = await directus.request(updateItem("memorial_victimes", editingVictime.id, editingVictime));
-        setVictimes(prev => prev.map(v => v.id === editingVictime.id ? (result as unknown as VictimeRow) : v));
-        toast.success("Victime mise à jour");
-      } else {
-        const result = await directus.request(createItem("memorial_victimes", editingVictime as any));
-        setVictimes(prev => [...prev, result as unknown as VictimeRow]);
-        toast.success("Victime créée");
-      }
-      setIsVictimeDialogOpen(false);
-    } catch (err: any) { toast.error(err.message); } finally { setIsSubmitting(false); }
   };
 
-  const handleSaveTemoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTemoin) return;
-    setIsSubmitting(true);
+  const handleDelete = async (collection: string, id: number, setter: (fn: (prev: any[]) => any[]) => void) => {
+    if (!confirm("Archiver cet élément ?")) return;
     try {
-      if (editingTemoin.id) {
-        const result = await directus.request(updateItem("memorial_temoins", editingTemoin.id, editingTemoin));
-        setTemoins(prev => prev.map(t => t.id === editingTemoin.id ? (result as unknown as TemoinRow) : t));
-        toast.success("Témoin mis à jour");
-      } else {
-        const result = await directus.request(createItem("memorial_temoins", editingTemoin as any));
-        setTemoins(prev => [...prev, result as unknown as TemoinRow]);
-        toast.success("Témoin ajouté");
-      }
-      setIsTemoinDialogOpen(false);
-    } catch (err: any) { toast.error(err.message); } finally { setIsSubmitting(false); }
+      await directus.request(updateItem(collection as any, id, { deleted_at: new Date().toISOString() }));
+      setter(prev => prev.filter(item => item.id !== id));
+      toast.success("Archivé avec succès");
+    } catch (err: any) { 
+      console.error("Archive failed:", err);
+      toast.error(`Erreur archivage : ${err.message}`); 
+    }
   };
 
+  // ── Fragment CRUD ──
   const handleSaveFragment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingFragment) return;
-    
-    // Validation
-    if (!editingFragment.victime_id || !editingFragment.auteur || !editingFragment.description) {
-      toast.error("Veuillez remplir la victime, l'auteur et la description.");
+
+    if (!editingFragment.victime_id || !editingFragment.auteur_temoin_id || !editingFragment.description) {
+      toast.error("Veuillez remplir la victime, l'auteur (témoin) et la description.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // Ensure defaults for type and status if new
       const dataToSave = {
         ...editingFragment,
-        type_fragment: editingFragment.type_fragment || "temoignage",
-        statut: editingFragment.statut || "en_attente"
+        type_id: editingFragment.type_id || TYPE_FRAGMENT_ID.TEMOIGNAGE,
+        statut_id: editingFragment.statut_id || STATUT_ID.A_VERIFIER,
       };
 
       if (editingFragment.id) {
-        const result = await directus.request(updateItem("memorial_fragments", editingFragment.id, dataToSave));
+        const result = await directus.request(updateItem("mmrl_fragments" as any, editingFragment.id, dataToSave));
         setFragments(prev => prev.map(f => f.id === editingFragment.id ? (result as unknown as FragmentRow) : f));
         toast.success("Fragment mis à jour");
       } else {
-        const result = await directus.request(createItem("memorial_fragments", dataToSave as any));
+        const result = await directus.request(createItem("mmrl_fragments" as any, dataToSave as any));
         setFragments(prev => [...prev, result as unknown as FragmentRow]);
         toast.success("Fragment ajouté");
       }
@@ -125,102 +190,7 @@ const Admin = () => {
     } catch (err: any) { toast.error(err.message); } finally { setIsSubmitting(false); }
   };
 
-  const handleSaveParcours = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingParcours) return;
-    setIsSubmitting(true);
-    try {
-      if (editingParcours.id) {
-        const result = await directus.request(updateItem("memorial_parcours", editingParcours.id, editingParcours));
-        setParcours(prev => prev.map(p => p.id === editingParcours.id ? (result as unknown as ParcoursRow) : p));
-        toast.success("Parcours mis à jour");
-      } else {
-        const result = await directus.request(createItem("memorial_parcours", editingParcours as any));
-        setParcours(prev => [...prev, result as unknown as ParcoursRow]);
-        toast.success("Parcours ajouté");
-      }
-      setIsParcoursDialogOpen(false);
-    } catch (err: any) { toast.error(err.message); } finally { setIsSubmitting(false); }
-  };
-
-  const handleValidateVictime = async (v: VictimeRow) => {
-    try {
-      const result = await directus.request(updateItem("memorial_victimes", v.id, { statut: 'publie' }));
-      setVictimes(prev => prev.map(item => item.id === v.id ? (result as unknown as VictimeRow) : item));
-      toast.success(`${v.prenom} ${v.nom} a été publié sur le mur`);
-    } catch (err: any) { toast.error(err.message); }
-  };
-
-  const handleValidateFragment = async (f: FragmentRow) => {
-    try {
-      const result = await directus.request(updateItem("memorial_fragments", f.id, { statut: 'valide' }));
-      setFragments(prev => prev.map(item => item.id === f.id ? (result as unknown as FragmentRow) : item));
-      toast.success("Fragment validé");
-    } catch (err: any) { toast.error(err.message); }
-  };
-
-  const handleValidateParcours = async (p: ParcoursRow) => {
-    try {
-      const result = await directus.request(updateItem("memorial_parcours", p.id, { statut: 'valide' }));
-      setParcours(prev => prev.map(item => item.id === p.id ? (result as unknown as ParcoursRow) : item));
-      toast.success("Étape de parcours validée");
-    } catch (err: any) { toast.error(err.message); }
-  };
-
-  const handleBulkValidate = async (type: 'victimes' | 'fragments' | 'parcours') => {
-    const list = type === 'victimes' ? victimes.filter(v => v.statut === 'brouillon') : type === 'fragments' ? fragments.filter(f => f.statut === 'en_attente') : parcours.filter(p => p.statut === 'en_attente');
-    if (list.length === 0) {
-      toast.info(`Aucun élément en attente à valider.`);
-      return;
-    }
-    if (!confirm(`Valider et publier ${list.length} éléments ?`)) return;
-
-    setIsSubmitting(true);
-    try {
-      const targetStatus = type === 'victimes' ? 'publie' : 'valide';
-      const collection = type === 'victimes' ? 'memorial_victimes' : type === 'fragments' ? 'memorial_fragments' : 'memorial_parcours';
-      
-      const results = await Promise.all(
-        list.map(item => directus.request(updateItem(collection as any, item.id, { statut: targetStatus })))
-      );
-      
-      if (type === 'victimes') {
-        const updatedVictimes = results as unknown as VictimeRow[];
-        setVictimes(prev => prev.map(v => {
-          const updated = updatedVictimes.find(u => u.id === v.id);
-          return updated ? updated : v;
-        }));
-      } else if (type === 'fragments') {
-        const updatedFragments = results as unknown as FragmentRow[];
-        setFragments(prev => prev.map(f => {
-          const updated = updatedFragments.find(u => u.id === f.id);
-          return updated ? updated : f;
-        }));
-      } else if (type === 'parcours') {
-        const updatedParcours = results as unknown as ParcoursRow[];
-        setParcours(prev => prev.map(p => {
-          const updated = updatedParcours.find(u => u.id === p.id);
-          return updated ? updated : p;
-        }));
-      }
-      toast.success(`${list.length} éléments validés avec succès`);
-    } catch (err: any) { 
-      toast.error("Erreur lors de la validation: " + err.message); 
-    } finally { 
-      setIsSubmitting(false); 
-    }
-  };
-
-  const handleDelete = async (collection: string, id: number, setter: (fn: (prev: any[]) => any[]) => void) => {
-    if (!confirm("Supprimer cet élément ?")) return;
-    try {
-      await directus.request(deleteItem(collection as any, id));
-      setter(prev => prev.filter(item => item.id !== id));
-      toast.success("Supprimé avec succès");
-    } catch (err: any) { toast.error(err.message); }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'victime' | 'fragment') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'fragment') => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsSubmitting(true);
@@ -229,15 +199,32 @@ const Admin = () => {
       formData.append("file", file);
       const result = await directus.request(uploadFiles(formData));
       const fileId = (result as any).id;
-      
-      if (target === 'victime') {
-        setEditingVictime(prev => ({ ...prev!, photo_principale: fileId }));
-      } else if (target === 'fragment') {
+      if (target === 'fragment') {
         setEditingFragment(prev => ({ ...prev!, fichier_media: fileId }));
       }
-      
       toast.success("Fichier téléchargé");
     } catch (err: any) { toast.error("Erreur d'upload"); } finally { setIsSubmitting(false); }
+  };
+
+  const handleBulkValidate = async (type: 'fragments') => {
+    const list = fragments.filter(f => f.statut_id === STATUT_ID.A_VERIFIER);
+    if (list.length === 0) { toast.info("Aucun élément à vérifier."); return; }
+    if (!confirm(`Passer ${list.length} fragments en "Avéré/Vérifié" ?`)) return;
+
+    setIsSubmitting(true);
+    try {
+      const results = await Promise.all(
+        list.map(item => directus.request(updateItem("mmrl_fragments" as any, item.id, { statut_id: STATUT_ID.VERIFIE })))
+      );
+      const updated = results as unknown as FragmentRow[];
+      setFragments(prev => prev.map(f => {
+        const u = updated.find(u => u.id === f.id);
+        return u ? u : f;
+      }));
+      toast.success(`${list.length} fragments validés`);
+    } catch (err: any) {
+      toast.error("Erreur lors de la validation: " + err.message);
+    } finally { setIsSubmitting(false); }
   };
 
   return (
@@ -249,381 +236,173 @@ const Admin = () => {
             <Shield className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-display text-foreground">Explorateur de Données</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={refreshAction} disabled={loading} className="gap-2">
-            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualiser
-          </Button>
+          <div className="flex gap-2">
+            <MultiInsertDialog onComplete={refreshAction} temoins={temoins} sources={sources} victimes={victimes} />
+            <CsvImporter onImportComplete={refreshAction} />
+            <Button variant="outline" size="sm" onClick={refreshAction} disabled={loading} className="gap-2">
+              <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Button>
+          </div>
         </div>
 
-        <Tabs defaultValue="victimes" className="w-full">
-          <TabsList className="flex flex-wrap h-auto gap-2 p-1 bg-muted/50 mb-8 overflow-x-auto justify-start">
-            <TabsTrigger value="victimes" className="gap-2"><User size={16} /> Victimes</TabsTrigger>
-            <TabsTrigger value="temoins" className="gap-2"><Users size={16} /> Témoins</TabsTrigger>
-            <TabsTrigger value="parcours" className="gap-2"><History size={16} /> Parcours</TabsTrigger>
-            <TabsTrigger value="fragments" className="gap-2"><Puzzle size={16} /> Fragments</TabsTrigger>
-          </TabsList>
-
-          {/* VICTIMES */}
-          <TabsContent value="victimes">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">Victimes ({victimes.length})</h2>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => handleBulkValidate('victimes')} disabled={isSubmitting || loading}>
-                  <Check className="mr-2 h-4 w-4" /> Tout Publier
-                </Button>
-                <Button onClick={() => { setEditingVictime({ statut: 'brouillon' }); setIsVictimeDialogOpen(true); }}>
-                  <Plus size={18} className="mr-2" /> Ajouter
-                </Button>
-              </div>
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Sidebar */}
+          <aside className="w-full md:w-64 space-y-8">
+            <div className="space-y-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion Données</p>
+              <nav className="flex flex-col gap-1">
+                <button 
+                  onClick={() => setActiveTab("dossiers")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "dossiers" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <GalleryVertical size={18} /> <span>Dossiers</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab("fragments")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "fragments" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <Puzzle size={18} /> <span>Fragments</span>
+                </button>
+              </nav>
             </div>
-            {collectionErrors.victimes && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Erreur de chargement</AlertTitle>
-                <AlertDescription>{collectionErrors.victimes}</AlertDescription>
-              </Alert>
-            )}
-            <Card className="overflow-hidden">
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Identité</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Témoin Rapporteur</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {victimes.map(v => (
-                    <TableRow key={v.id}>
-                      <TableCell className="font-medium flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
-                          {v.photo_principale && <img src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${v.photo_principale}?width=40&height=40`} alt="" />}
-                        </div>
-                        {v.prenom} {v.nom}
-                      </TableCell>
-                      <TableCell><span className={`text-xs px-2 py-1 rounded-full ${v.statut === 'publie' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{v.statut}</span></TableCell>
-                      <TableCell>{getTemoinNameForVictime(v.id)}</TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2">
-                        {v.statut === 'brouillon' && (
-                          <Button variant="ghost" size="icon" className="text-green-600" onClick={() => handleValidateVictime(v)} title="Publier sur le mur">
-                            <Check size={16} />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingVictime(v); setIsVictimeDialogOpen(true); }}><Pencil size={16} /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete("memorial_victimes", v.id, setVictimes)}><Trash2 size={16} /></Button>
-                      </div></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
 
-
-          {/* TEMOINS */}
-          <TabsContent value="temoins">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">Témoins ({temoins.length})</h2>
-              <Button onClick={() => { setEditingTemoin({ statut: 'actif' }); setIsTemoinDialogOpen(true); }}>
-                <Plus size={18} className="mr-2" /> Ajouter
-              </Button>
+            <div className="space-y-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion Système</p>
+              <nav className="flex flex-col gap-1">
+                <button 
+                  onClick={() => setActiveTab("lookups")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "lookups" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <Settings2 size={18} /> <span>Configuration</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab("users")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "users" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <Users size={18} /> <span>Utilisateurs</span>
+                </button>
+              </nav>
             </div>
-            {collectionErrors.temoins && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Erreur de chargement</AlertTitle>
-                <AlertDescription>{collectionErrors.temoins}</AlertDescription>
-              </Alert>
-            )}
-            <Card className="overflow-hidden">
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Identité</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Téléphone</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {temoins.map(t => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium">{t.prenom} {t.nom}</TableCell>
-                      <TableCell>{t.email}</TableCell>
-                      <TableCell>{t.telephone || "-"}</TableCell>
-                      <TableCell><span className={`text-xs px-2 py-1 rounded-full ${t.statut === 'actif' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{t.statut}</span></TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingTemoin(t); setIsTemoinDialogOpen(true); }}><Pencil size={16} /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete("memorial_temoins", t.id, setTemoins)}><Trash2 size={16} /></Button>
-                      </div></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
+          </aside>
 
-          {/* PARCOURS */}
-          <TabsContent value="parcours">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">Lignes de Temps ({parcours.length})</h2>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => handleBulkValidate('parcours')} disabled={isSubmitting || loading}>
-                  <Check className="mr-2 h-4 w-4" /> Tout Valider
-                </Button>
-                <Button onClick={() => { setEditingParcours({ ordre: 0, statut: 'valide' }); setIsParcoursDialogOpen(true); }}>
-                  <Plus size={18} className="mr-2" /> Ajouter
-                </Button>
-              </div>
-            </div>
-            {collectionErrors.parcours && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Erreur de chargement</AlertTitle>
-                <AlertDescription>{collectionErrors.parcours}</AlertDescription>
-              </Alert>
-            )}
-            <Card>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Victime</TableHead>
-                  <TableHead>Année</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {parcours.map(p => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{getVictimeName(p.victime_id)}</TableCell>
-                      <TableCell className="text-accent font-bold">{p.annee}</TableCell>
-                      <TableCell className="max-w-md truncate">{p.description}</TableCell>
-                      <TableCell><span className={`text-xs px-2 py-1 rounded-full ${(p.statut || 'valide') === 'valide' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{p.statut || 'valide'}</span></TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2">
-                        {(p.statut === 'en_attente') && (
-                          <Button variant="ghost" size="icon" className="text-green-600" onClick={() => handleValidateParcours(p)} title="Valider">
-                            <Check size={16} />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingParcours(p); setIsParcoursDialogOpen(true); }}><Pencil size={16} /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete("memorial_parcours", p.id, setParcours)}><Trash2 size={16} /></Button>
-                      </div></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
+          {/* Main Content Area */}
+          <main className="flex-1">
+            <Tabs value={activeTab} className="w-full mt-0">
+              {/* TabsContent are hidden if value doesn't match activeTab */}
+              
+              {/* ─── DOSSIERS ─── */}
+              <TabsContent value="dossiers" className="mt-0">
+                <DossiersPanel
+                  victimes={victimes}
+                  temoins={temoins}
+                  sources={sources}
+                  parcours={parcours}
+                  fragments={fragments}
+                  setVictimes={setVictimes}
+                  setTemoins={setTemoins}
+                  setSources={setSources}
+                  setParcours={setParcours}
+                  setFragments={setFragments}
+                  onRefresh={refreshAction}
+                />
+              </TabsContent>
 
-
-          {/* FRAGMENTS */}
-          <TabsContent value="fragments">
-             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold">Fragments de Mémoire ({fragments.length})</h2>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => handleBulkValidate('fragments')} disabled={isSubmitting || loading}>
-                    <Check className="mr-2 h-4 w-4" /> Tout Valider
-                  </Button>
-                  <Button onClick={() => { setEditingFragment({ statut: 'en_attente', type_fragment: 'temoignage' }); setIsFragmentDialogOpen(true); }}>
-                    <Plus size={18} className="mr-2" /> Ajouter
-                  </Button>
+              {/* ─── FRAGMENTS ─── */}
+              <TabsContent value="fragments" className="mt-0">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold">Fragments de Mémoire ({fragments.length})</h2>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => handleBulkValidate('fragments')} disabled={isSubmitting || loading}>
+                      <Check className="mr-2 h-4 w-4" /> Tout Marquer Avéré
+                    </Button>
+                    <Button onClick={() => { setEditingFragment({ statut_id: STATUT_ID.A_VERIFIER, type_id: TYPE_FRAGMENT_ID.TEMOIGNAGE }); setIsFragmentDialogOpen(true); }}>
+                      <Plus size={18} className="mr-2" /> Ajouter
+                    </Button>
+                  </div>
                 </div>
-             </div>
-             {collectionErrors.fragments && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Erreur de chargement</AlertTitle>
-                <AlertDescription>{collectionErrors.fragments}</AlertDescription>
-              </Alert>
-            )}
-             <Card>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Auteur</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Victime</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {fragments.map(f => (
-                    <TableRow key={f.id}>
-                      <TableCell className="font-medium">{f.auteur}</TableCell>
-                      <TableCell className="capitalize">{f.type_fragment}</TableCell>
-                      <TableCell>{getVictimeName(f.victime_id)}</TableCell>
-                      <TableCell><span className={`text-xs px-2 py-0.5 rounded ${f.statut === 'valide' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{f.statut}</span></TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2">
-                        {f.statut === 'en_attente' && (
-                          <Button variant="ghost" size="icon" className="text-green-600" onClick={() => handleValidateFragment(f)} title="Valider">
-                            <Check size={16} />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingFragment(f); setIsFragmentDialogOpen(true); }}><Pencil size={16} /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete("memorial_fragments", f.id, setFragments)}><Trash2 size={16} /></Button>
-                      </div></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                {collectionErrors.fragments && (
+                  <Alert variant="destructive" className="mb-6">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Erreur de chargement</AlertTitle>
+                    <AlertDescription>{collectionErrors.fragments}</AlertDescription>
+                  </Alert>
+                )}
+                <Card>
+                  <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>Titre / Description</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Victime</TableHead>
+                      <TableHead>Auteur</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {fragments.map(f => (
+                        <TableRow key={f.id}>
+                          <TableCell className="max-w-[200px]">
+                            <div className="font-semibold truncate">{f.titre || "Sans titre"}</div>
+                            <div className="text-xs text-muted-foreground truncate">{f.description}</div>
+                          </TableCell>
+                          <TableCell className="capitalize text-xs">{getTypeName(f.type_id)}</TableCell>
+                          <TableCell className="text-sm font-medium">{getVictimeName(f.victime_id)}</TableCell>
+                          <TableCell className="text-xs">
+                            {getTemoinName(f.auteur_temoin_id)}
+                            {f.source_id && <div className="text-[10px] text-muted-foreground">Source: {getSourceName(f.source_id)}</div>}
+                          </TableCell>
+                          <TableCell>{getStatutBadge(f.statut_id)}</TableCell>
+                          <TableCell className="text-right"><div className="flex justify-end gap-2">
+                            <Select value={String(f.statut_id)} onValueChange={s => handleQuickStatus('mmrl_fragments', f.id, Number(s))}>
+                              <SelectTrigger className="h-7 text-xs w-36">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {qualiteStatuts.map(q => (
+                                  <SelectItem key={q.id} value={String(q.id)}>{q.libelle}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button variant="ghost" size="icon" onClick={() => setViewingItem({ type: 'fragment', data: f })} title="Voir les détails"><Eye size={16} /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => { setEditingFragment(f); setIsFragmentDialogOpen(true); }}><Pencil size={16} /></Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete("mmrl_fragments", f.id, setFragments)}><Trash2 size={16} /></Button>
+                          </div></TableCell>
+                        </TableRow>
+                      ))}
+                      {fragments.length === 0 && (
+                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-12">Aucun fragment enregistré.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </TabsContent>
+
+              {/* ─── CONFIGURATION ─── */}
+              <TabsContent value="lookups" className="mt-0">
+                <LookupsPanel 
+                  qualiteStatuts={qualiteStatuts}
+                  typeFragments={typeFragments}
+                  onRefresh={refreshAction}
+                />
+              </TabsContent>
+
+              {/* ─── UTILISATEURS ─── */}
+              <TabsContent value="users" className="mt-0">
+                <UsersPanel />
+              </TabsContent>
+            </Tabs>
+          </main>
+        </div>
       </div>
 
-      {/* DIALOG VICTIME (simplified here for brevity, reuse logic from previous Admin) */}
-      <Dialog open={isVictimeDialogOpen} onOpenChange={setIsVictimeDialogOpen}>
-          <DialogContent className="max-w-2xl">
-             <DialogHeader><DialogTitle>Gestion Victime</DialogTitle></DialogHeader>
-             <form onSubmit={handleSaveVictime} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Prénom</Label>
-                      <Input value={editingVictime?.prenom || ""} onChange={e => setEditingVictime(p => ({...p!, prenom: e.target.value}))} placeholder="Prénom" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Nom</Label>
-                      <Input value={editingVictime?.nom || ""} onChange={e => setEditingVictime(p => ({...p!, nom: e.target.value}))} placeholder="Nom" required />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Sexe</Label>
-                    <Select value={editingVictime?.sexe || ""} onValueChange={v => setEditingVictime(p => ({...p!, sexe: v}))}>
-                      <SelectTrigger><SelectValue placeholder="Sexe" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="M">Masculin</SelectItem>
-                        <SelectItem value="F">Féminin</SelectItem>
-                        <SelectItem value="Inconnu">Inconnu</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Statut</Label>
-                    <Select value={editingVictime?.statut || "brouillon"} onValueChange={v => setEditingVictime(p => ({...p!, statut: v as any}))}>
-                      <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="brouillon">Brouillon</SelectItem>
-                        <SelectItem value="publie">Publié</SelectItem>
-                        <SelectItem value="archive">Archivé</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Date de naissance</Label>
-                    <Input type="date" value={editingVictime?.date_naissance || ""} onChange={e => setEditingVictime(p => ({...p!, date_naissance: e.target.value}))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Lieu de naissance</Label>
-                    <Input value={editingVictime?.lieu_naissance || ""} onChange={e => setEditingVictime(p => ({...p!, lieu_naissance: e.target.value}))} placeholder="Lieu" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Date de décès</Label>
-                    <Input type="date" value={editingVictime?.date_deces || ""} onChange={e => setEditingVictime(p => ({...p!, date_deces: e.target.value}))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Lieu de décès</Label>
-                    <Input value={editingVictime?.lieu_deces || ""} onChange={e => setEditingVictime(p => ({...p!, lieu_deces: e.target.value}))} placeholder="Lieu" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Profession</Label>
-                  <Input value={editingVictime?.profession || ""} onChange={e => setEditingVictime(p => ({...p!, profession: e.target.value}))} placeholder="Profession" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Origine Familiale</Label>
-                  <Input value={editingVictime?.origine_familiale || ""} onChange={e => setEditingVictime(p => ({...p!, origine_familiale: e.target.value}))} placeholder="Origine" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Source (Témoin)</Label>
-                  <Select value={String(editingVictime?.temoin_id || "")} onValueChange={v => setEditingVictime(p => ({...p!, temoin_id: Number(v)}))}>
-                      <SelectTrigger><SelectValue placeholder="Choisir un témoin" /></SelectTrigger>
-                      <SelectContent>
-                          {temoins.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.prenom} {t.nom} ({t.email})</SelectItem>)}
-                      </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Photo principale (Directus File ID)</Label>
-                  <div className="flex gap-2 items-center">
-                      <Input value={editingVictime?.photo_principale || ""} onChange={e => setEditingVictime(p => ({...p!, photo_principale: e.target.value}))} placeholder="ID du fichier" />
-                      <div className="relative">
-                        <Button type="button" variant="outline" size="icon" className="shrink-0">
-                          <ImageIcon size={18} />
-                          <Input type="file" onChange={(e) => handleFileUpload(e, 'victime')} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
-                        </Button>
-                      </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4 sticky bottom-0 bg-background pb-2">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setIsVictimeDialogOpen(false)}>Annuler</Button>
-                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Check size={18} className="mr-2" />}
-                    Enregistrer les modifications
-                  </Button>
-                </div>
-             </form>
-          </DialogContent>
-      </Dialog>
-
-      {/* DIALOG TEMOIN */}
-      <Dialog open={isTemoinDialogOpen} onOpenChange={setIsTemoinDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingTemoin?.id ? "Modifier" : "Ajouter"} un témoin</DialogTitle></DialogHeader>
-          <form onSubmit={handleSaveTemoin} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Prénom</Label>
-                <Input value={editingTemoin?.prenom || ""} onChange={e => setEditingTemoin(p => ({...p!, prenom: e.target.value}))} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Nom</Label>
-                <Input value={editingTemoin?.nom || ""} onChange={e => setEditingTemoin(p => ({...p!, nom: e.target.value}))} required />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" value={editingTemoin?.email || ""} onChange={e => setEditingTemoin(p => ({...p!, email: e.target.value}))} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Téléphone</Label>
-              <Input value={editingTemoin?.telephone || ""} onChange={e => setEditingTemoin(p => ({...p!, telephone: e.target.value}))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Statut</Label>
-              <Select value={editingTemoin?.statut || "actif"} onValueChange={v => setEditingTemoin(p => ({...p!, statut: v}))}>
-                <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="actif">Actif</SelectItem>
-                  <SelectItem value="inactif">Inactif</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsTemoinDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={isSubmitting}>Enregistrer</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* DIALOG FRAGMENT */}
+      {/* ─── DIALOG FRAGMENT ─── */}
       <Dialog open={isFragmentDialogOpen} onOpenChange={setIsFragmentDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingFragment?.id ? "Modifier" : "Ajouter"} un fragment</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveFragment} className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Victime</Label>
-              <Select value={String(editingFragment?.victime_id || "")} onValueChange={v => setEditingFragment(p => ({...p!, victime_id: Number(v)}))}>
+              <Select value={String(editingFragment?.victime_id || "")} onValueChange={v => setEditingFragment(p => ({ ...p!, victime_id: Number(v) }))}>
                 <SelectTrigger><SelectValue placeholder="Choisir une victime" /></SelectTrigger>
                 <SelectContent>
                   {victimes.map(v => <SelectItem key={v.id} value={String(v.id)}>{v.prenom} {v.nom}</SelectItem>)}
@@ -632,32 +411,65 @@ const Admin = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Auteur</Label>
-                <Input value={editingFragment?.auteur || ""} onChange={e => setEditingFragment(p => ({...p!, auteur: e.target.value}))} required />
+                <Label>Auteur (Témoin)</Label>
+                <Select value={String(editingFragment?.auteur_temoin_id || "")} onValueChange={v => setEditingFragment(p => ({ ...p!, auteur_temoin_id: Number(v) }))}>
+                  <SelectTrigger><SelectValue placeholder="Choisir un témoin" /></SelectTrigger>
+                  <SelectContent>
+                    {temoins.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.prenom} {t.nom}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Type</Label>
-                <Select value={editingFragment?.type_fragment || "temoignage"} onValueChange={v => setEditingFragment(p => ({...p!, type_fragment: v as any}))}>
+                <Select value={String(editingFragment?.type_id || TYPE_FRAGMENT_ID.TEMOIGNAGE)} onValueChange={v => setEditingFragment(p => ({ ...p!, type_id: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="temoignage">Témoignage</SelectItem>
-                    <SelectItem value="photographie">Photo</SelectItem>
-                    <SelectItem value="video">Vidéo</SelectItem>
-                    <SelectItem value="recit">Récit</SelectItem>
-                    <SelectItem value="document">Document</SelectItem>
-                    <SelectItem value="lieu">Lieu</SelectItem>
+                    {typeFragments.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.libelle}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Description / Contenu</Label>
-              <Textarea value={editingFragment?.description || ""} onChange={e => setEditingFragment(p => ({...p!, description: e.target.value}))} required />
+              <Label>Source (optionnel)</Label>
+              <Select value={String(editingFragment?.source_id || "")} onValueChange={v => setEditingFragment(p => ({ ...p!, source_id: v ? Number(v) : null }))}>
+                <SelectTrigger><SelectValue placeholder="Aucune source" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Aucune source</SelectItem>
+                  {sources.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.prenom} {s.nom}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Titre (optionnel)</Label>
+              <Input value={editingFragment?.titre || ""} onChange={e => setEditingFragment(p => ({ ...p!, titre: e.target.value }))} placeholder="Titre du fragment" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description / Contenu *</Label>
+              <Textarea value={editingFragment?.description || ""} onChange={e => setEditingFragment(p => ({ ...p!, description: e.target.value }))} required />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Année du fragment</Label>
+                <Input type="number" value={editingFragment?.annee_fragment || ""} onChange={e => setEditingFragment(p => ({ ...p!, annee_fragment: e.target.value ? Number(e.target.value) : null }))} placeholder="ex: 1975" />
+              </div>
+              <div className="space-y-2">
+                <Label>Date précise</Label>
+                <Input type="date" value={editingFragment?.date_fragment || ""} onChange={e => setEditingFragment(p => ({ ...p!, date_fragment: e.target.value || null }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Statut</Label>
+              <Select value={String(editingFragment?.statut_id || STATUT_ID.A_VERIFIER)} onValueChange={v => setEditingFragment(p => ({ ...p!, statut_id: Number(v) }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {qualiteStatuts.map(q => <SelectItem key={q.id} value={String(q.id)}>{q.libelle}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Média (Optionnel)</Label>
               <div className="flex gap-2 items-center">
-                <Input value={editingFragment?.fichier_media || ""} onChange={e => setEditingFragment(p => ({...p!, fichier_media: e.target.value}))} placeholder="ID du fichier" />
+                <Input value={editingFragment?.fichier_media || ""} onChange={e => setEditingFragment(p => ({ ...p!, fichier_media: e.target.value }))} placeholder="ID du fichier" />
                 <div className="relative">
                   <Button type="button" variant="outline" size="icon" className="shrink-0">
                     <ImageIcon size={18} />
@@ -674,35 +486,47 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG PARCOURS */}
-      <Dialog open={isParcoursDialogOpen} onOpenChange={setIsParcoursDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingParcours?.id ? "Modifier" : "Ajouter"} un élément de parcours</DialogTitle></DialogHeader>
-          <form onSubmit={handleSaveParcours} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Victime</Label>
-              <Select value={String(editingParcours?.victime_id || "")} onValueChange={v => setEditingParcours(p => ({...p!, victime_id: Number(v)}))}>
-                <SelectTrigger><SelectValue placeholder="Choisir une victime" /></SelectTrigger>
-                <SelectContent>
-                  {victimes.map(v => <SelectItem key={v.id} value={String(v.id)}>{v.prenom} {v.nom}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Année / Période</Label>
-              <Input value={editingParcours?.annee || ""} onChange={e => setEditingParcours(p => ({...p!, annee: e.target.value}))} placeholder="ex: 1970 - 1975" />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={editingParcours?.description || ""} onChange={e => setEditingParcours(p => ({...p!, description: e.target.value}))} />
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsParcoursDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={isSubmitting}>Enregistrer</Button>
-            </div>
-          </form>
+      {/* ─── DIALOG VIEW DETAILS ─── */}
+      <Dialog open={!!viewingItem} onOpenChange={(open) => !open && setViewingItem(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="capitalize">Détails : {viewingItem?.type}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
+            {viewingItem?.data && Object.entries(viewingItem.data).map(([key, value]) => {
+              if (['user_created', 'user_updated', 'date_created', 'date_updated'].includes(key)) return null;
+              return (
+                <div key={key} className="grid grid-cols-3 gap-4 border-b pb-2">
+                  <div className="font-semibold text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</div>
+                  <div className="col-span-2">
+                    {value === null || value === undefined || value === '' ? (
+                      <span className="text-muted-foreground italic">Non renseigné</span>
+                    ) : key === 'photo_principale' || key === 'fichier_media' ? (
+                      <img src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${value}?width=200`} alt="Media" className="max-w-[200px] rounded-md" />
+                    ) : key === 'victime_id' ? (
+                      getVictimeName(value as number)
+                    ) : key === 'auteur_temoin_id' ? (
+                      getTemoinName(value as number)
+                    ) : key === 'source_id' ? (
+                      getSourceName(value as number)
+                    ) : key === 'type_id' ? (
+                      getTypeName(value as number)
+                    ) : key === 'statut_id' ? (
+                      getStatutBadge(value as number)
+                    ) : (
+                      String(value)
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" onClick={() => setViewingItem(null)}>Fermer</Button>
+          </div>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 };

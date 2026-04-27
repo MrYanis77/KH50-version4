@@ -30,13 +30,15 @@ const Auth = () => {
 
     try {
       if (mode === "login") {
-        await signIn(email, password);
-        toast.success("Connexion réussie");
-        navigate("/");
+        const { role } = await signIn(email, password);
+        toast.success("Connexion réussie !");
+        // Admins → /admin, regular users → /memorial
+        const isAdminRole = role === "af76e557-fb34-4a8b-9900-a6b60121662c";
+        navigate(isAdminRole ? "/admin" : "/memorial");
       } else if (mode === "signup") {
         await signUp(email, password, displayName);
-        toast.success("Inscription réussie ! Vérifiez votre email pour confirmer votre compte.");
-        setMode("login");
+        toast.success("Compte créé ! Bienvenue sur Fragmentis.");
+        navigate("/memorial");
       } else {
         await resetPassword(email);
         toast.success("Un email de réinitialisation a été envoyé.");
@@ -75,24 +77,24 @@ const Auth = () => {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="flex flex-col items-center justify-center text-center gap-3">
-  <img
-    src="https://www.fragmentis-vitae.org/images/fragment-rond.svg"
-    alt="Fragments KH50 logo"
-    width="80"
-    height="80"
-    className="h-14 w-14 object-contain"
-  />
+            <img
+              src="https://www.fragmentis-vitae.org/images/fragment-rond.svg"
+              alt="Fragments KH50 logo"
+              width="80"
+              height="80"
+              className="h-14 w-14 object-contain"
+            />
 
-  <div className="flex flex-col items-center text-center">
-    <span className="font-body text-[24px] font-bold text-foreground leading-none tracking-tight">
-      Fragments #KH50
-    </span>
+            <div className="flex flex-col items-center text-center">
+              <span className="font-body text-[24px] font-bold text-foreground leading-none tracking-tight">
+                Fragments #KH50
+              </span>
 
-    <span className="mt-2 text-sm text-muted-foreground">
-      Mémorial numérique du génocide cambodgien
-    </span>
-  </div>
-</Link>
+              <span className="mt-2 text-sm text-muted-foreground">
+                Mémorial numérique du génocide cambodgien
+              </span>
+            </div>
+          </Link>
         </div>
 
         <Card className="border-border/50 shadow-lg">
@@ -165,7 +167,7 @@ const Auth = () => {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       className="pl-10 pr-10"
-                      minLength={6}
+                    // minLength={6}
                     />
                     <button
                       type="button"
@@ -196,10 +198,10 @@ const Auth = () => {
                 {loading
                   ? "Chargement..."
                   : mode === "login"
-                  ? "Se connecter"
-                  : mode === "signup"
-                  ? "Créer mon compte"
-                  : "Envoyer le lien"}
+                    ? "Se connecter"
+                    : mode === "signup"
+                      ? "Créer mon compte"
+                      : "Envoyer le lien"}
               </Button>
             </form>
 

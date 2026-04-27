@@ -9,17 +9,15 @@ import { NavLink } from "@/components/NavLink";
 const navLinks = [
   { label: "Mémorial #KH50", href: "https://www.fragmentis-vitae.org/presentation/", end: true },
   { label: "Mur Virtuel", href: "/memorial", end: false },
+  { label: "Recueil", href: "/recueil", end: false },
   { label: "Archives", href: "/archives", end: false },
   { label: "À propos", href: "/about", end: false },
 ];
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
-
-  // For development, we allow access to admin
-  const isAdmin = true;
 
   const handleAuth = async () => {
     if (user) {
@@ -132,4 +130,3 @@ const Navbar = () => {
 };
 
 export default Navbar;
-Navbar;
