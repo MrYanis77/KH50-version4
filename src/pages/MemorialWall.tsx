@@ -2,9 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemorialPersons } from "@/hooks/useDirectus";
-import HeroSection from "@/components/HeroSection";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
-import FloatingBackButton from "@/components/FloatingBackButton";
 import { User, Search, MapPin, Clock, Briefcase, LogIn, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,7 +47,6 @@ const MemorialWall = () => {
       </div>
 
       <main className="container mx-auto px-4 py-10 relative z-10">
-        <HeroSection showTexture={false} />
 
         {/* Controls row */}
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between mb-8 mt-4">
@@ -257,7 +254,6 @@ const MemorialWall = () => {
         )}
       </AnimatePresence>
 
-      <FloatingBackButton />
     </div>
   );
 };

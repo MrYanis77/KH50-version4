@@ -17,7 +17,6 @@ import {
   Check, Loader2, GalleryVertical, Puzzle, RefreshCcw,
   AlertTriangle, Eye, Settings2, Users
 } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow, SourceTemoignageRow } from "@/integration/directus-types";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
@@ -230,7 +229,7 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <Navbar />
+      
       <div className="container mx-auto px-4 py-8 pt-24">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">

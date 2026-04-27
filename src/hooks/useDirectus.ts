@@ -20,14 +20,14 @@ export function useMemorialPersons() {
       .request(
         readItems("mmrl_victimes", {
           filter: {
-            statut_id: { _eq: STATUT_ID.VERIFIE },
+            statut_id: { show_on_wall: { _eq: true } },
             deleted_at: { _null: true },
           },
           limit: -1,
         })
       )
       .then((data) => setPeople(data as unknown as VictimeRow[]))
-      .catch((e: Error) => setError(e.message))
+      .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -54,6 +54,7 @@ export function useMemorialPerson(id: number) {
       directus.request(
         readItems("mmrl_fragments", {
           filter: { victime_id: { _eq: id }, deleted_at: { _null: true } },
+          fields: ["*.*"]
         })
       ).catch(() => []),
       directus.request(
@@ -116,8 +117,8 @@ export function useAdminData() {
         directus.request(readItems("mmrl_sources_temoignage", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
         directus.request(readItems("mmrl_parcours", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
         directus.request(readItems("mmrl_fragments", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
-        directus.request(readItems("mmrl_qualite_statut", { limit: -1 })),
-        directus.request(readItems("mmrl_type_fragment", { limit: -1 })),
+        directus.request(readItems("mmrl_qualite_statut", { limit: -1, fields: ["*"] })),
+        directus.request(readItems("mmrl_type_fragment", { limit: -1, fields: ["*"] })),
       ]);
 
       const errors: Record<string, string> = {};

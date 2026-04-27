@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Settings2, Hash } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import type { QualiteStatutRow, TypeFragmentRow } from "@/integration/directus-types";
 
 interface LookupsPanelProps {
@@ -110,6 +111,7 @@ export const LookupsPanel = ({ qualiteStatuts, typeFragments, onRefresh }: Looku
                 <TableHead>Libellé</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Couleur</TableHead>
+                <TableHead>Mur Public</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -124,6 +126,13 @@ export const LookupsPanel = ({ qualiteStatuts, typeFragments, onRefresh }: Looku
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: q.couleur_hex }} />
                       <span className="text-xs font-mono uppercase">{q.couleur_hex}</span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {q.show_on_wall ? (
+                      <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">Oui</span>
+                    ) : (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">Non</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
@@ -228,6 +237,17 @@ export const LookupsPanel = ({ qualiteStatuts, typeFragments, onRefresh }: Looku
                   required
                 />
               </div>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/20">
+              <div className="space-y-0.5">
+                <Label htmlFor="show_on_wall" className="text-sm font-medium cursor-pointer">Visibilité mur public</Label>
+                <p className="text-[10px] text-muted-foreground">Afficher les fiches ayant ce statut sur le mur virtuel.</p>
+              </div>
+              <Switch 
+                id="show_on_wall"
+                checked={editingStatut?.show_on_wall || false} 
+                onCheckedChange={checked => setEditingStatut(p => ({...p!, show_on_wall: checked}))} 
+              />
             </div>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => setIsStatutDialogOpen(false)}>Annuler</Button>

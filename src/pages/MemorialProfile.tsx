@@ -1,8 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned, Pencil } from "lucide-react";
-import Navbar from "@/components/Navbar";
+import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned, Pencil, Loader2 } from "lucide-react";
 import { useMemorialPerson } from "@/hooks/useDirectus";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +15,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { directus } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { AddInformationDialog } from "@/components/AddInformationDialog";
 
 
@@ -144,7 +142,7 @@ const MemorialProfile = () => {
 
   return (
     <div className="min-h-screen bg-background font-body">
-      <Navbar />
+      
 
       {/* Header */}
       <motion.section
@@ -261,7 +259,7 @@ const MemorialProfile = () => {
               Récits & Témoignages
             </motion.h2>
             <div className="space-y-8 mb-12">
-              {fragments.filter(f => [1, 4, 5].includes(f.type_id)).map((frag) => (
+              {fragments.filter(f => ['temoignage', 'recit', 'document'].includes(f.type?.code || '')).map((frag) => (
                 <motion.div key={frag.id} variants={fadeUp} className={`bg-card rounded-2xl p-8 border shadow-sm italic text-lg leading-relaxed relative quote-card transition-all ${
                   frag.statut_id === 2
                     ? 'border-yellow-400 bg-yellow-50/60 dark:bg-yellow-900/10'
@@ -281,7 +279,7 @@ const MemorialProfile = () => {
               Autres Mémoires
             </motion.h2>
             <div className="space-y-4">
-              {fragments.filter(f => ![1, 4, 5].includes(f.type_id)).map((frag) => (
+              {fragments.filter(f => !['temoignage', 'recit', 'document'].includes(f.type?.code || '')).map((frag) => (
                 <motion.div
                   key={frag.id}
                   variants={fadeUp}
@@ -295,12 +293,12 @@ const MemorialProfile = () => {
                     {frag.statut_id === 2 ? (
                       <Badge className="text-xs bg-yellow-100 text-yellow-800 border border-yellow-300">🟡 Hypothèse</Badge>
                     ) : (
-                      <Badge variant="default" className="text-xs">{frag.type_fragment}</Badge>
+                      <Badge variant="default" className="text-xs">{frag.type?.libelle || 'Mémoire'}</Badge>
                     )}
                     <span className="text-xs text-muted-foreground ml-auto">{frag.date_fragment || (frag.annee_fragment ? String(frag.annee_fragment) : '')}</span>
                   </div>
                   <p className="text-foreground leading-relaxed">{frag.description}</p>
-                  <p className="text-xs text-muted-foreground mt-2">— {frag.auteur}</p>
+                  <p className="text-xs text-muted-foreground mt-2">— Source : {frag.auteur_temoin_id ? 'Témoin' : 'Anonyme'}</p>
                   {frag.fichier_media && (
                     <div className="mt-4">
                         <img 
@@ -361,7 +359,7 @@ const MemorialProfile = () => {
       )}
 
       {/* Galerie de photos (issue des fragments) */}
-      {fragments && fragments.filter(f => ['photographie', 'video'].includes(f.type_fragment)).length > 0 && (
+      {fragments && fragments.filter(f => ['photographie', 'video'].includes(f.type?.code || '')).length > 0 && (
         <motion.section
           className="py-12 px-4"
           initial="hidden"
@@ -374,7 +372,7 @@ const MemorialProfile = () => {
               Galerie Mémoire
             </motion.h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {fragments.filter(f => [2, 3].includes(f.type_id) && f.fichier_media).map((frag) => (
+              {fragments.filter(f => ['photographie', 'video'].includes(f.type?.code || '') && f.fichier_media).map((frag) => (
                 <motion.div 
                   key={frag.id} 
                   variants={fadeUp}

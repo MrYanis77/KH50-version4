@@ -25,6 +25,7 @@ export interface QualiteStatutRow {
   code: 'verifie' | 'a_verifier' | 'non_fiable';
   libelle: string;
   couleur_hex: string;
+  show_on_wall: boolean;
 }
 
 /**
@@ -63,6 +64,8 @@ export interface SourceTemoignageRow {
   source_user_id?: string | null;
   prenom: string;
   nom: string;
+  email?: string | null;
+  telephone?: string | null;
   /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
   statut_id: number;
   statut?: QualiteStatutRow;

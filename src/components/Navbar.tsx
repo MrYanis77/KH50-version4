@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Menu, X, Shield } from "lucide-react";
+import { Menu, X, Shield, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import ThemeToggle from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 
 const navLinks = [
-  { label: "Mémorial #KH50", href: "https://www.fragmentis-vitae.org/presentation/", end: true },
-  { label: "Mur Virtuel", href: "/memorial", end: false },
   { label: "Recueil", href: "/recueil", end: false },
   { label: "Archives", href: "/archives", end: false },
+  { label: "Mur Virtuel", href: "/memorial", end: false },
   { label: "À propos", href: "/about", end: false },
 ];
 
@@ -77,6 +76,16 @@ const Navbar = () => {
             </Link>
           )}
 
+          {user && (
+            <Link
+              to="/profile"
+              className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+            >
+              <User className="h-4 w-4" />
+              Profil
+            </Link>
+          )}
+
           <ThemeToggle />
 
           <button
@@ -111,6 +120,17 @@ const Navbar = () => {
                 {link.label}
               </NavLink>
             ))}
+
+            {user && (
+              <NavLink
+                to="/profile"
+                onClick={() => setMobileOpen(false)}
+                className="py-2 text-sm font-medium text-foreground/75 hover:text-foreground"
+                activeClassName="text-foreground underline underline-offset-4"
+              >
+                Mon Profil
+              </NavLink>
+            )}
 
             <div className="flex items-center justify-between py-2 border-y border-border/50">
               <span className="text-sm font-medium text-foreground">Mode Sombre</span>

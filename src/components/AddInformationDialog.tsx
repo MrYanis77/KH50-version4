@@ -183,19 +183,6 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
               </div>
 
               <div className="space-y-2">
-                <Label>Statut de l'information (Certitude)</Label>
-                <Select value={String(fragmentForm.statut_id)} onValueChange={(v) => setFragmentForm(p => ({ ...p, statut_id: Number(v) }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statuses.map(s => (
-                      <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label>Titre (optionnel)</Label>
                 <Input
                   value={fragmentForm.titre}

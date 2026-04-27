@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import Navbar from "@/components/Navbar";
 import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ChevronDown, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -248,7 +247,6 @@ const ArchiveCategory = () => {
   if (!config) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="font-display text-3xl text-foreground mb-4">Catégorie introuvable</h1>
           <Button variant="outline" onClick={() => navigate("/archives")} className="gap-2">
@@ -263,7 +261,7 @@ const ArchiveCategory = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      
 
       {/* Header */}
       <section className="relative py-16 md:py-24 overflow-hidden">

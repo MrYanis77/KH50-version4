@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import Index from "./pages/Index.tsx";
+import Navbar from "@/components/Navbar";
 import Archives from "./pages/Archives.tsx";
 import ArchiveCategory from "./pages/ArchiveCategory.tsx";
 import About from "./pages/About.tsx";
@@ -15,6 +15,7 @@ import MemorialWall from "./pages/MemorialWall.tsx";
 import Admin from "./pages/Admin.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
 import RecueilMemoires from "./pages/RecueilMemoires.tsx";
+import Profile from "./pages/Profile.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -22,8 +23,16 @@ const queryClient = new QueryClient();
 /** Guard: redirects non-admin users to /auth */
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, isAdmin } = useAuth();
-  if (loading) return null; // wait for auth to resolve
+  if (loading) return null;
   if (!user || !isAdmin) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+};
+
+/** Guard: redirects unauthenticated users to /auth */
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 };
 
@@ -34,21 +43,26 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/archives" element={<Archives />} />
-            <Route path="/archives/:category" element={<ArchiveCategory />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/memorial/:id" element={<MemorialProfile />} />
-            <Route path="/memorial/" element={<MemorialWall />} />
-            <Route path="/recueil" element={<RecueilMemoires />} />
-            <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
-            <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <div className="flex min-h-screen flex-col">
+            <Navbar />
+            <main className="flex-grow">
+              <Routes>
+                <Route path="/" element={<MemorialWall />} />
+                <Route path="/archives" element={<Archives />} />
+                <Route path="/archives/:category" element={<ArchiveCategory />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/memorial/:id" element={<MemorialProfile />} />
+                <Route path="/memorial" element={<MemorialWall />} />
+                <Route path="/recueil" element={<RecueilMemoires />} />
+                <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+                <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+                <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </main>
+          </div>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

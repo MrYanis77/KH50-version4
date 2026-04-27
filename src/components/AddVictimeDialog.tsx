@@ -85,6 +85,8 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   const [sourceForm, setSourceForm] = useState({
     prenom: user?.first_name || "",
     nom: user?.last_name || "",
+    email: user?.email || "",
+    telephone: "",
     statut_id: initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
   });
 
@@ -106,7 +108,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   const resetForms = () => {
     const defaultStatutId = statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER;
     setVictimeForm({ prenom: "", nom: "", sexe: "", annee_naissance: "", date_naissance: "", lieu_naissance: "", annee_deces: "", date_deces: "", lieu_deces: "", profession: "", origine_familiale: "", statut_id: defaultStatutId });
-    setSourceForm({ prenom: user?.first_name || "", nom: user?.last_name || "", statut_id: defaultStatutId });
+    setSourceForm({ prenom: user?.first_name || "", nom: user?.last_name || "", email: user?.email || "", telephone: "", statut_id: defaultStatutId });
     setPhotoFile(null);
     setParcoursEntries([{ annee: "", titre: "", description: "", statut_id: defaultStatutId }]);
     setStep(0);
@@ -129,6 +131,10 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
       }
       if (!sourceForm.prenom || !sourceForm.nom) {
         toast.error("Veuillez indiquer votre prénom et nom comme source du témoignage.");
+        return false;
+      }
+      if (!sourceForm.email || !sourceForm.telephone) {
+        toast.error("L'email et le téléphone de la source sont obligatoires.");
         return false;
       }
     }
@@ -191,6 +197,8 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
             source_user_id: user.id,
             prenom: sourceForm.prenom || user.first_name || "",
             nom: sourceForm.nom || user.last_name || "",
+            email: sourceForm.email || user.email || "",
+            telephone: sourceForm.telephone || "",
             statut_id: sourceForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
           } as any));
           sourceId = (s as any).id;
@@ -374,19 +382,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Statut de vérification (Général)</Label>
-                  <Select value={String(victimeForm.statut_id)} onValueChange={v => setVictimeForm(p => ({ ...p, statut_id: Number(v) }))}>
-                    <SelectTrigger className={victimeForm.statut_id === STATUT_ID.A_VERIFIER ? 'border-yellow-400' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statuses.map(s => (
-                        <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -455,18 +450,15 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                       <Input value={sourceForm.nom} onChange={e => setSourceForm(p => ({ ...p, nom: e.target.value }))} placeholder="Nom" className="h-8 text-sm" />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Statut de la source</Label>
-                    <Select value={String(sourceForm.statut_id)} onValueChange={v => setSourceForm(p => ({ ...p, statut_id: Number(v) }))}>
-                      <SelectTrigger className={`h-8 text-xs ${sourceForm.statut_id === STATUT_ID.A_VERIFIER ? 'border-yellow-400' : ''}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statuses.map(s => (
-                          <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Email *</Label>
+                      <Input value={sourceForm.email} onChange={e => setSourceForm(p => ({ ...p, email: e.target.value }))} placeholder="votre@email.com" className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Téléphone *</Label>
+                      <Input value={sourceForm.telephone} onChange={e => setSourceForm(p => ({ ...p, telephone: e.target.value }))} placeholder="06..." className="h-8 text-sm" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -504,19 +496,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                         placeholder="ex: 1975"
                         className="h-8 text-sm"
                       />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Certitude</Label>
-                      <Select value={String(entry.statut_id)} onValueChange={v => updateParcoursEntry(i, "statut_id", Number(v))}>
-                        <SelectTrigger className={`h-8 text-sm ${entry.statut_id === STATUT_ID.A_VERIFIER ? 'border-yellow-400' : ''}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statuses.map(s => (
-                            <SelectItem key={s.id} value={String(s.id)}>{s.libelle}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
                   <div className="space-y-1">

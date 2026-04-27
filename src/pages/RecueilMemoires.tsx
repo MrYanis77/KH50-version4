@@ -13,7 +13,6 @@ import {
   MessageSquare, Camera, Video, FileText, Mic,
   ChevronRight, Calendar, User, ArrowRight
 } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
 import type { FragmentRow, VictimeRow } from "@/integration/directus-types";
 
@@ -94,7 +93,7 @@ const RecueilMemoires = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      
       
       {/* Hero Section */}
       <section className="relative py-20 overflow-hidden border-b">

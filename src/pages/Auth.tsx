@@ -233,7 +233,7 @@ const Auth = () => {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © 2023 Fragmentis Vitae Asia
+          © 2026 Fragmentis Vitae Asia
         </p>
       </motion.div>
     </div>

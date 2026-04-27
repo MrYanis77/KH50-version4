@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import Navbar from "@/components/Navbar";
 import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ChevronDown, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -137,7 +136,7 @@ const Archives = () => {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      
 
       {/* Hero */}
       <section className="relative py-20 md:py-28 overflow-hidden">

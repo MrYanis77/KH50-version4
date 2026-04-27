@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Linkedin, Twitter, Facebook, Instagram, Heart, Handshake, MessageCircle, ExternalLink } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import heroTexture from "@/assets/hero-texture.jpg";
 
 const fadeUp = {
@@ -36,7 +35,7 @@ const socials = [
 const About = () => {
   return (
     <div className="min-h-screen bg-background font-body">
-      <Navbar />
+      
 
       {/* Hero */}
       <section className="relative overflow-hidden py-24 md:py-32">
@@ -224,7 +223,7 @@ const About = () => {
       {/* Footer */}
       <footer className="py-8 border-t border-border">
         <p className="text-center text-sm text-muted-foreground">
-          © 2023 Fragmentis Vitae Asia
+          © 2026 Fragmentis Vitae Asia
         </p>
       </footer>
     </div>
