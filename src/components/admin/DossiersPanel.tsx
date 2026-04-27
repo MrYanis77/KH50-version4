@@ -12,10 +12,12 @@ import {
   Search, User, Trash2, ChevronDown, ChevronRight,
   History, Clock, MapPin, Briefcase, Mail, Phone,
   Users, UserCheck, Puzzle, FileText, Camera, Video,
-  Quote, Mic, Eye,
+  Quote, Mic, Eye, Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
+import { ItemDetailDialog } from "./ItemDetailDialog";
+import { AddFragmentDialog } from "./AddFragmentDialog";
 import type {
   VictimeRow, TemoinRow, ParcoursRow, FragmentRow,
   SourceTemoignageRow,
@@ -190,7 +192,11 @@ export function DossiersPanel({
   const [filterStatut, setFilterStatut] = useState<StatutFilter>("tous");
   const [expandedTemoins, setExpandedTemoins] = useState<Set<number>>(new Set());
   const [expandedVictimes, setExpandedVictimes] = useState<Set<number>>(new Set());
-  const [viewingItem, setViewingItem] = useState<{ type: string; data: any } | null>(null);
+  
+  // Detail Dialog State
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailType, setDetailType] = useState<'victime' | 'temoin' | 'fragment'>('victime');
+  const [detailData, setDetailData] = useState<any>(null);
 
   const toggleTemoin = (id: number) =>
     setExpandedTemoins((prev) => {
@@ -208,8 +214,10 @@ export function DossiersPanel({
       return next;
     });
 
-  const handleOpenItem = (type: string, id: number) => {
-    // Detail view removed per user request
+  const handleOpenDetail = (type: 'victime' | 'temoin' | 'fragment', data: any) => {
+    setDetailType(type);
+    setDetailData(data);
+    setDetailOpen(true);
   };
 
   // ---------------------------------------------------------------------------
@@ -405,6 +413,14 @@ export function DossiersPanel({
                 </div>
               </div>
               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground"
+                  onClick={() => handleOpenDetail('temoin', t)}
+                >
+                  <Eye size={13} />
+                </Button>
                 <StatutSelect
                   value={normalizeStatutId(t.statut_id)}
                   options={TEMOIN_OPTIONS}
@@ -443,6 +459,14 @@ export function DossiersPanel({
                           <StatutBadge statut_id={normalizeStatutId(v.statut_id)} />
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground"
+                            onClick={() => handleOpenDetail('victime', v)}
+                          >
+                            <Eye size={13} />
+                          </Button>
                           <StatutSelect
                             value={normalizeStatutId(v.statut_id)}
                             options={VICTIME_OPTIONS}
@@ -493,13 +517,23 @@ export function DossiersPanel({
                             </div>
                           )}
                           <div className="space-y-2">
-                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
-                              <Puzzle size={10} /> Fragments
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
+                                <Puzzle size={10} /> Fragments
+                              </p>
+                              <AddFragmentDialog 
+                                victimeId={v.id} 
+                                auteurTemoinId={getId(v.auteur_temoin_id)} 
+                                onSuccess={onRefresh} 
+                              />
+                            </div>
+                            {vicFragments.length === 0 && (
+                              <p className="text-[10px] text-muted-foreground italic pl-4">Aucun fragment.</p>
+                            )}
                             {vicFragments.map((f) => (
                               <div 
                                 key={f.id} 
-                                className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/50"
+                                className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/50 hover:bg-muted/30 transition-colors"
                               >
                                 <div className="flex items-center gap-3">
                                   <Badge variant="outline" className="text-[9px] h-4 uppercase">
@@ -508,6 +542,14 @@ export function DossiersPanel({
                                   <span className="text-xs truncate max-w-[200px]">{f.titre || f.description}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground"
+                                    onClick={() => handleOpenDetail('fragment', f)}
+                                  >
+                                    <Eye size={12} />
+                                  </Button>
                                   <StatutSelect
                                     value={normalizeStatutId(f.statut_id)}
                                     options={GENERIC_OPTIONS}
@@ -536,7 +578,12 @@ export function DossiersPanel({
         );
       })}
 
-      {/* Detail view removed */}
+      <ItemDetailDialog 
+        isOpen={detailOpen} 
+        onClose={() => setDetailOpen(false)} 
+        type={detailType} 
+        data={detailData} 
+      />
     </div>
   );
 }

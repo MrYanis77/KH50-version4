@@ -27,6 +27,7 @@ import AddVictimeDialog from "@/components/AddVictimeDialog";
 import { DossiersPanel } from "@/components/admin/DossiersPanel";
 import { LookupsPanel } from "@/components/admin/LookupsPanel";
 import { UsersPanel } from "@/components/admin/UsersPanel";
+import { ItemDetailDialog } from "@/components/admin/ItemDetailDialog";
 
 const Admin = () => {
   const {
@@ -486,47 +487,12 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ─── DIALOG VIEW DETAILS ─── */}
-      <Dialog open={!!viewingItem} onOpenChange={(open) => !open && setViewingItem(null)}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="capitalize">Détails : {viewingItem?.type}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
-            {viewingItem?.data && Object.entries(viewingItem.data).map(([key, value]) => {
-              if (['user_created', 'user_updated', 'date_created', 'date_updated'].includes(key)) return null;
-              return (
-                <div key={key} className="grid grid-cols-3 gap-4 border-b pb-2">
-                  <div className="font-semibold text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</div>
-                  <div className="col-span-2">
-                    {value === null || value === undefined || value === '' ? (
-                      <span className="text-muted-foreground italic">Non renseigné</span>
-                    ) : key === 'photo_principale' || key === 'fichier_media' ? (
-                      <img src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${value}?width=200`} alt="Media" className="max-w-[200px] rounded-md" />
-                    ) : key === 'victime_id' ? (
-                      getVictimeName(value as number)
-                    ) : key === 'auteur_temoin_id' ? (
-                      getTemoinName(value as number)
-                    ) : key === 'source_id' ? (
-                      getSourceName(value as number)
-                    ) : key === 'type_id' ? (
-                      getTypeName(value as number)
-                    ) : key === 'statut_id' ? (
-                      getStatutBadge(value as number)
-                    ) : (
-                      String(value)
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end pt-4">
-            <Button variant="outline" onClick={() => setViewingItem(null)}>Fermer</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+      <ItemDetailDialog 
+        isOpen={!!viewingItem} 
+        onClose={() => setViewingItem(null)} 
+        type={viewingItem?.type as any} 
+        data={viewingItem?.data} 
+      />
     </div>
   );
 };
