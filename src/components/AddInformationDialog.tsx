@@ -22,7 +22,7 @@ interface AddInformationDialogProps {
 }
 
 export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: initialTypes, statuses: initialStatuses }: AddInformationDialogProps) => {
-  const { user } = useAuth();
+  const { user, temoin } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,36 +83,23 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
     setIsSubmitting(true);
     try {
-      // 1. Find or create témoin linked to this user
-      let temoinId: number;
-      const byUserId = await directusAuth.request(
-        readItems("mmrl_temoins", { filter: { directus_user_id: { _eq: user.id }, deleted_at: { _null: true } }, limit: 1 })
-      );
-
-      if (byUserId && byUserId.length > 0) {
-        temoinId = (byUserId[0] as any).id;
-      } else {
-        const t = await directusAuth.request(createItem("mmrl_temoins" as any, {
-          directus_user_id: user.id,
-          prenom: user.first_name || "",
-          nom: user.last_name || "",
-          email: user.email,
-          statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
-        }));
-        temoinId = (t as any).id;
+      // 1. Get witness ID from AuthContext
+      if (!temoin) {
+        throw new Error("Profil témoin introuvable. Veuillez vous reconnecter.");
       }
+      const temoinId = temoin.id;
 
-      // 2. Upload media if present
+      // 2. Upload media if present (using admin client to ensure it works)
       let uploadedMediaId: string | null = null;
       if (mediaFile) {
         const formData = new FormData();
         formData.append("file", mediaFile);
-        const uploadResult = await directusAuth.request(uploadFiles(formData));
+        // On utilise le client admin pour l'upload pour éviter les soucis de permissions sur directus_files
+        const uploadResult = await directus.request(uploadFiles(formData));
         uploadedMediaId = (uploadResult as any).id;
       }
 
-      // 3. Create fragment
-      await directusAuth.request(createItem("mmrl_fragments" as any, {
+      const payload = {
         victime_id: victimeId,
         auteur_temoin_id: temoinId,
         type_id: fragmentForm.type_id,
@@ -122,7 +109,11 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
         date_fragment: fragmentForm.date_fragment || null,
         fichier_media: uploadedMediaId,
         statut_id: fragmentForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
-      }));
+      };
+      console.log("[AddInfo] Payload:", payload);
+
+      // 3. Create fragment (using admin client)
+      await directus.request(createItem("mmrl_fragments" as any, payload));
 
       toast.success("Votre information a été soumise. Elle sera publiée après vérification.");
       setIsOpen(false);
@@ -138,8 +129,9 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
       });
       setMediaFile(null);
     } catch (err: any) {
-      console.error(err);
-      toast.error("Une erreur est survenue : " + (err.message || "Erreur inconnue"));
+      console.error("[AddFragment] Insertion error:", err);
+      const detail = err.errors?.[0]?.message || err.message || "Erreur inconnue";
+      toast.error(`Erreur : ${detail}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -223,7 +215,7 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
               <div className="space-y-2 pt-2">
                 <Label>Joindre un fichier (Optionnel)</Label>
-                <Input type="file" accept="image/*,.pdf,audio/*" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+                <Input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
               </div>
 
             </div>

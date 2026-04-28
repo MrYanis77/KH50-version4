@@ -46,7 +46,7 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualit
         mediaId = (res as any).id;
       }
 
-      await directus.request(createItem("mmrl_fragments" as any, {
+      const payload = {
         victime_id: victimeId,
         auteur_temoin_id: auteurTemoinId,
         type_id: form.type_id,
@@ -55,7 +55,10 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualit
         annee_fragment: form.annee_fragment ? Number(form.annee_fragment) : null,
         fichier_media: mediaId,
         statut_id: form.statut_id,
-      }));
+      };
+      console.log("[AddFragment] Payload:", payload);
+
+      await directus.request(createItem("mmrl_fragments" as any, payload));
 
       toast.success("Fragment ajouté avec succès");
       setIsOpen(false);
@@ -69,7 +72,9 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualit
       setMediaFile(null);
       onSuccess();
     } catch (err: any) {
-      toast.error("Erreur: " + err.message);
+      console.error("[AddFragment] Insertion error:", err);
+      const detail = err.errors?.[0]?.message || err.message || "Erreur inconnue";
+      toast.error(`Erreur : ${detail}`);
     } finally {
       setIsSubmitting(false);
     }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { FragmentRow, VictimeRow } from "@/integration/directus-types";
+import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
 
 const RecueilMemoires = () => {
   const { user } = useAuth();
@@ -86,9 +87,17 @@ const RecueilMemoires = () => {
       f.titre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       f.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       getVictimeName(f.victime_id).toLowerCase().includes(searchTerm.toLowerCase());
-    
     if (activeTab === "all") return matchesSearch;
-    return matchesSearch && f.type?.code === activeTab;
+    
+    const typeCode = f.type?.code || '';
+    const typeId = f.type_id;
+    
+    const isMatch = typeCode === activeTab || 
+      (activeTab === 'temoignage' && typeId === TYPE_FRAGMENT_ID.TEMOIGNAGE) ||
+      (activeTab === 'photographie' && typeId === TYPE_FRAGMENT_ID.PHOTOGRAPHIE) ||
+      (activeTab === 'video' && typeId === TYPE_FRAGMENT_ID.VIDEO);
+      
+    return matchesSearch && isMatch;
   });
 
   return (
@@ -174,12 +183,27 @@ const RecueilMemoires = () => {
               >
                 <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col">
                   {f.fichier_media && (
-                    <div className="aspect-video w-full overflow-hidden relative">
-                      <img 
-                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${f.fichier_media}?width=500&height=300&fit=cover`} 
-                        alt={f.titre || "Média"}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      />
+                    <div className="aspect-video w-full overflow-hidden relative bg-black">
+                      {(f.type_id === TYPE_FRAGMENT_ID.VIDEO || f.type?.code === 'video') ? (
+                        <video 
+                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${f.fichier_media}`} 
+                          className="w-full h-full object-cover"
+                          onMouseOver={e => (e.target as HTMLVideoElement).play()}
+                          onMouseOut={e => {
+                            (e.target as HTMLVideoElement).pause();
+                            (e.target as HTMLVideoElement).currentTime = 0;
+                          }}
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        <img 
+                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${f.fichier_media}?width=500&height=300&fit=cover`} 
+                          alt={f.titre || "Média"}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                      )}
                       <div className="absolute top-3 right-3">
                         <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm border-none gap-1.5 px-2 py-1">
                           {getIcon(f.type_id?.code || f.type?.code || "other")}

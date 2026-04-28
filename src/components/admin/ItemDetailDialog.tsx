@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
 
 interface ItemDetailDialogProps {
   isOpen: boolean;
@@ -178,19 +179,53 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
       </div>
 
       {f.fichier_media && (
-        <div className="rounded-xl overflow-hidden border border-border bg-black/5 flex items-center justify-center min-h-[200px]">
-          {f.type_id === 2 ? (
+        <div className="rounded-xl overflow-hidden border border-border bg-black/5 flex flex-col items-center justify-center min-h-[200px] relative group">
+          {f.type_id === TYPE_FRAGMENT_ID.PHOTOGRAPHIE ? (
             <img 
               src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
-              alt={f.titre} 
-              className="max-w-full max-h-[400px] object-contain shadow-lg"
+              alt={f.titre || "Photographie"} 
+              className="max-w-full max-h-[500px] object-contain shadow-lg"
             />
-          ) : f.type_id === 3 ? (
+          ) : (f.type_id === TYPE_FRAGMENT_ID.VIDEO || f.type?.code === 'video') ? (
             <video 
               src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
               controls 
-              className="max-w-full max-h-[400px]"
+              preload="metadata"
+              playsInline
+              className="max-w-full max-h-[500px] bg-black"
             />
+          ) : (f.type_id === TYPE_FRAGMENT_ID.AUDIO || f.type?.code === 'audio') ? (
+            <div className="flex flex-col items-center gap-4 p-8 w-full">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <Mic size={32} />
+              </div>
+              <audio 
+                src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
+                controls 
+                preload="metadata"
+                className="w-full max-w-md"
+              />
+            </div>
+          ) : (f.type_id === TYPE_FRAGMENT_ID.DOCUMENT || f.type_id === TYPE_FRAGMENT_ID.RECIT || f.type?.code === 'document' || f.type?.code === 'recit') ? (
+            <div className="flex flex-col items-center gap-4 p-8">
+              <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
+                <FileText size={40} />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-medium">Document d'archive</p>
+                <p className="text-xs text-muted-foreground">Consulter le document original</p>
+              </div>
+              <Button variant="outline" size="sm" asChild className="mt-2">
+                <a href={`${DIRECTUS_URL}/assets/${f.fichier_media}`} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} className="mr-2" /> Ouvrir le document
+                </a>
+              </Button>
+              <iframe 
+                src={`${DIRECTUS_URL}/assets/${f.fichier_media}#toolbar=0&navpanes=0&scrollbar=0`} 
+                className="w-full h-[400px] mt-4 rounded-lg border border-border hidden sm:block"
+                title="Document Preview"
+              />
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-2 p-8">
               <FileText className="h-12 w-12 text-muted-foreground" />

@@ -8,8 +8,8 @@ import { NavLink } from "@/components/NavLink";
 
 const navLinks = [
   { label: "Recueil", href: "/recueil", end: false },
-  { label: "Archives", href: "/archives", end: false },
   { label: "Mur Virtuel", href: "/memorial", end: false },
+  { label: "Archives", href: "/archives", end: false },
   { label: "À propos", href: "/about", end: false },
 ];
 

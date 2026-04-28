@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { directus } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
+import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
 import { toast } from "sonner";
 import { AddInformationDialog } from "@/components/AddInformationDialog";
 
@@ -43,7 +44,7 @@ const MemorialProfile = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { person, fragments, parcours, loading, error } = useMemorialPerson(Number(id));
-  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'video' | 'image' | 'pdf' } | null>(null);
   const [showContributeForm, setShowContributeForm] = useState(false);
   const [showParcoursForm, setShowParcoursForm] = useState(false);
   const [fragmentFile, setFragmentFile] = useState<File | null>(null);
@@ -259,7 +260,12 @@ const MemorialProfile = () => {
               Récits & Témoignages
             </motion.h2>
             <div className="space-y-8 mb-12">
-              {fragments.filter(f => ['temoignage', 'recit', 'document'].includes(f.type?.code || '')).map((frag) => (
+              {fragments.filter(f => {
+                const code = f.type?.code || '';
+                const id = f.type_id;
+                return ['temoignage', 'recit', 'document'].includes(code) || 
+                       [TYPE_FRAGMENT_ID.TEMOIGNAGE, TYPE_FRAGMENT_ID.RECIT, TYPE_FRAGMENT_ID.DOCUMENT].includes(id);
+              }).map((frag) => (
                 <motion.div key={frag.id} variants={fadeUp} className={`bg-card rounded-2xl p-8 border shadow-sm italic text-lg leading-relaxed relative quote-card transition-all ${
                   frag.statut_id === 2
                     ? 'border-yellow-400 bg-yellow-50/60 dark:bg-yellow-900/10'
@@ -279,7 +285,13 @@ const MemorialProfile = () => {
               Autres Mémoires
             </motion.h2>
             <div className="space-y-4">
-              {fragments.filter(f => !['temoignage', 'recit', 'document'].includes(f.type?.code || '')).map((frag) => (
+              {fragments.filter(f => {
+                const code = f.type?.code || '';
+                const id = f.type_id;
+                const isTextType = ['temoignage', 'recit', 'document'].includes(code) || 
+                                  [TYPE_FRAGMENT_ID.TEMOIGNAGE, TYPE_FRAGMENT_ID.RECIT, TYPE_FRAGMENT_ID.DOCUMENT].includes(id);
+                return !isTextType;
+              }).map((frag) => (
                 <motion.div
                   key={frag.id}
                   variants={fadeUp}
@@ -301,12 +313,32 @@ const MemorialProfile = () => {
                   <p className="text-xs text-muted-foreground mt-2">— Source : {frag.auteur_temoin_id ? 'Témoin' : 'Anonyme'}</p>
                   {frag.fichier_media && (
                     <div className="mt-4">
+                      {frag.type?.code === 'video' || frag.type_id === 3 ? (
+                        <video 
+                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                          controls 
+                          preload="metadata"
+                          playsInline
+                          className="max-h-96 w-full rounded-lg bg-black"
+                        />
+                      ) : frag.type?.code === 'audio' || frag.type_id === 7 ? (
+                        <audio 
+                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                          controls 
+                          preload="metadata"
+                          className="w-full"
+                        />
+                      ) : (
                         <img 
                             src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
                             alt="Archive" 
                             className="max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => setLightboxImg(`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`)}
+                            onClick={() => setLightboxMedia({ 
+                              url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`, 
+                              type: frag.type?.code === 'document' ? 'pdf' : 'image' 
+                            })}
                         />
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -345,7 +377,10 @@ const MemorialProfile = () => {
                             src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${item.fichier_media}`} 
                             alt="Document de parcours" 
                             className="w-full h-auto cursor-pointer hover:scale-105 transition-transform"
-                            onClick={() => setLightboxImg(`${import.meta.env.VITE_DIRECTUS_URL}/assets/${item.fichier_media}`)}
+                            onClick={() => setLightboxMedia({ 
+                              url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${item.fichier_media}`, 
+                              type: 'image' // On suppose que c'est une image ici, ou pdf si on veut
+                            })}
                           />
                         </div>
                       )}
@@ -359,7 +394,12 @@ const MemorialProfile = () => {
       )}
 
       {/* Galerie de photos (issue des fragments) */}
-      {fragments && fragments.filter(f => ['photographie', 'video'].includes(f.type?.code || '')).length > 0 && (
+      {fragments && fragments.filter(f => {
+        const code = f.type?.code || '';
+        const id = f.type_id;
+        return ['photographie', 'video'].includes(code) || 
+               [TYPE_FRAGMENT_ID.PHOTOGRAPHIE, TYPE_FRAGMENT_ID.VIDEO].includes(id);
+      }).length > 0 && (
         <motion.section
           className="py-12 px-4"
           initial="hidden"
@@ -372,7 +412,13 @@ const MemorialProfile = () => {
               Galerie Mémoire
             </motion.h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {fragments.filter(f => ['photographie', 'video'].includes(f.type?.code || '') && f.fichier_media).map((frag) => (
+              {fragments.filter(f => {
+                const code = f.type?.code || '';
+                const id = f.type_id;
+                const isGalleryType = ['photographie', 'video'].includes(code) || 
+                                     [TYPE_FRAGMENT_ID.PHOTOGRAPHIE, TYPE_FRAGMENT_ID.VIDEO].includes(id);
+                return isGalleryType && f.fichier_media;
+              }).map((frag) => (
                 <motion.div 
                   key={frag.id} 
                   variants={fadeUp}
@@ -380,16 +426,31 @@ const MemorialProfile = () => {
                   className={`aspect-square rounded-xl overflow-hidden border bg-muted cursor-pointer shadow-sm hover:shadow-md transition-all relative group ${
                     frag.statut_id === 2 ? 'border-yellow-400' : 'border-border'
                   }`}
-                  onClick={() => setLightboxImg(`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`)}
+                  onClick={() => setLightboxMedia({ 
+                    url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`, 
+                    type: frag.type?.code === 'video' ? 'video' : 'image' 
+                  })}
                 >
                   {frag.statut_id === 2 && (
                      <Badge className="absolute top-2 left-2 text-[10px] z-20 bg-yellow-100 text-yellow-800">🟡</Badge>
                   )}
-                  <img 
-                    src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}?width=400&height=400&fit=cover`} 
-                    alt="Photo d'archive" 
-                    className="w-full h-full object-cover"
-                  />
+                  {frag.type?.code === 'video' ? (
+                    <div className="w-full h-full relative">
+                      <video 
+                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
+                        <Video className="w-12 h-12 text-white/80" />
+                      </div>
+                    </div>
+                  ) : (
+                    <img 
+                      src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}?width=400&height=400&fit=cover`} 
+                      alt="Photo d'archive" 
+                      className="w-full h-full object-cover"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                     <p className="text-white text-sm">{frag.description}</p>
                   </div>
@@ -402,13 +463,13 @@ const MemorialProfile = () => {
 
       {/* Lightbox */}
       <AnimatePresence>
-        {lightboxImg && (
+        {lightboxMedia && (
           <motion.div
             className="fixed inset-0 z-50 bg-foreground/90 backdrop-blur-sm flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setLightboxImg(null)}
+            onClick={() => setLightboxMedia(null)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -418,12 +479,28 @@ const MemorialProfile = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={() => setLightboxImg(null)}
+                onClick={() => setLightboxMedia(null)}
                 className="absolute top-4 right-4 bg-background/20 backdrop-blur-md rounded-full p-2 text-white hover:bg-white/20 transition-colors z-50"
               >
                 <X className="h-6 w-6" />
               </button>
-              <img src={lightboxImg} alt="Vue agrandie" className="rounded-lg max-w-full max-h-[90vh] object-contain shadow-2xl" />
+              
+              {lightboxMedia.type === 'video' ? (
+                <video src={lightboxMedia.url} controls autoPlay preload="auto" playsInline className="rounded-lg max-w-full max-h-[90vh] shadow-2xl" />
+              ) : lightboxMedia.type === 'pdf' ? (
+                <div className="w-full h-full flex flex-col gap-4">
+                  <div className="flex-1 bg-white rounded-lg overflow-hidden shadow-2xl">
+                    <iframe src={`${lightboxMedia.url}#toolbar=0`} className="w-full h-full border-none" title="Document Preview" />
+                  </div>
+                  <div className="flex justify-center pb-4">
+                    <Button variant="secondary" asChild>
+                      <a href={lightboxMedia.url} target="_blank" rel="noreferrer">Ouvrir dans un nouvel onglet</a>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <img src={lightboxMedia.url} alt="Vue agrandie" className="rounded-lg max-w-full max-h-[90vh] object-contain shadow-2xl" />
+              )}
             </motion.div>
           </motion.div>
         )}

@@ -120,6 +120,43 @@ export const MultiInsertDialog = ({ onComplete, temoins, sources, victimes }: Mu
         </>
       );
     }
+    if (targetCollection === "mmrl_fragments") {
+      return (
+        <>
+          <TableCell>
+            <Select value={String(row.victime_id || "")} onValueChange={v => updateRow(index, "victime_id", Number(v))}>
+              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Victime" /></SelectTrigger>
+              <SelectContent>
+                {victimes.map(v => <SelectItem key={v.id} value={String(v.id)}>{v.prenom} {v.nom}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </TableCell>
+          <TableCell>
+            <Select value={String(row.auteur_temoin_id || "")} onValueChange={v => updateRow(index, "auteur_temoin_id", Number(v))}>
+              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Témoin" /></SelectTrigger>
+              <SelectContent>
+                {temoins.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.prenom} {t.nom}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </TableCell>
+          <TableCell>
+            <Select value={String(row.type_id || TYPE_FRAGMENT_ID.TEMOIGNAGE)} onValueChange={v => updateRow(index, "type_id", Number(v))}>
+              <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.TEMOIGNAGE)}>Témoignage</SelectItem>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.PHOTOGRAPHIE)}>Photo</SelectItem>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.VIDEO)}>Vidéo</SelectItem>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.AUDIO)}>Audio</SelectItem>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.RECIT)}>Récit</SelectItem>
+                <SelectItem value={String(TYPE_FRAGMENT_ID.DOCUMENT)}>Document</SelectItem>
+              </SelectContent>
+            </Select>
+          </TableCell>
+          <TableCell><Input placeholder="Description" value={row.description || ""} onChange={e => updateRow(index, "description", e.target.value)} /></TableCell>
+          <TableCell><Input placeholder="Fichier ID" value={row.fichier_media || ""} onChange={e => updateRow(index, "fichier_media", e.target.value)} className="font-mono text-[10px]" /></TableCell>
+        </>
+      );
+    }
     return null;
   };
 
@@ -147,6 +184,7 @@ export const MultiInsertDialog = ({ onComplete, temoins, sources, victimes }: Mu
               <SelectItem value="mmrl_temoins">Témoins</SelectItem>
               <SelectItem value="mmrl_sources_temoignage">Sources de témoignage</SelectItem>
               <SelectItem value="mmrl_parcours">Parcours</SelectItem>
+              <SelectItem value="mmrl_fragments">Fragments</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -181,6 +219,15 @@ export const MultiInsertDialog = ({ onComplete, temoins, sources, victimes }: Mu
                     <TableHead>Victime</TableHead>
                     <TableHead>Année</TableHead>
                     <TableHead>Description</TableHead>
+                  </>
+                )}
+                {targetCollection === "mmrl_fragments" && (
+                  <>
+                    <TableHead>Victime</TableHead>
+                    <TableHead>Témoin</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Média ID</TableHead>
                   </>
                 )}
                 <TableHead className="w-[50px]"></TableHead>
