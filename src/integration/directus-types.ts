@@ -13,6 +13,8 @@ export interface DirectusSchema {
   mmrl_victimes: VictimeRow[];
   mmrl_parcours: ParcoursRow[];
   mmrl_fragments: FragmentRow[];
+  mmrl_relations_familiales: RelationFamilialeRow[];
+  mmrl_sepultures: SepultureRow[];
   directus_files: DirectusFilesRow[];
   directus_users: DirectusUsersRow[];
 }
@@ -147,6 +149,51 @@ export interface FragmentRow {
   deleted_at?: string | null;
 }
 
+/**
+ * mmrl_relations_familiales — liens de parenté entre victimes (« araignée »)
+ *
+ * Règles :
+ *  - `victime_id_a` est toujours renseigné
+ *  - Si le relatif figure dans la base → `victime_id_b` non null
+ *  - Sinon → `nom_relatif_externe` renseigné
+ */
+export interface RelationFamilialeRow {
+  id: number;
+  victime_id_a: number;
+  victime_id_b?: number | null;
+  nom_relatif_externe?: string | null;
+  type_relation: 'conjoint' | 'parent' | 'enfant' | 'frere_soeur' | 'autre';
+  description?: string | null;
+  /** FK → mmrl_temoins.id */
+  auteur_temoin_id?: number | null;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  /** Champ joint optionnel — la victime liée si victime_id_b non null */
+  victime_b?: VictimeRow | null;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}
+
+/** mmrl_sepultures — sépulture virtuelle d'une victime (unique par victime) */
+export interface SepultureRow {
+  id: number;
+  victime_id: number;
+  /** FK → mmrl_temoins.id */
+  auteur_temoin_id?: number | null;
+  type_sepulture: 'stupa' | 'autel' | 'jardin';
+  epitaphe?: string | null;
+  message?: string | null;
+  nb_bougies: number;
+  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}
+
 // ── Directus system tables ────────────────────────────────────────────────────
 
 export interface DirectusFilesRow {
@@ -226,3 +273,26 @@ export type TypeFragmentCode =
   | 'audio';
 
 export type QualiteCode = 'verifie' | 'a_verifier' | 'non_fiable';
+
+export type TypeRelationCode =
+  | 'conjoint'
+  | 'parent'
+  | 'enfant'
+  | 'frere_soeur'
+  | 'autre';
+
+export const TYPE_RELATION_LABELS: Record<TypeRelationCode, string> = {
+  conjoint: 'Conjoint·e',
+  parent: 'Parent',
+  enfant: 'Enfant',
+  frere_soeur: 'Frère / Sœur',
+  autre: 'Autre',
+};
+
+export type TypeSepulture = 'stupa' | 'autel' | 'jardin';
+
+export const TYPE_SEPULTURE_LABELS: Record<TypeSepulture, string> = {
+  stupa: 'Stupa',
+  autel: 'Autel',
+  jardin: 'Jardin du souvenir',
+};

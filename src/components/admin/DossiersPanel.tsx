@@ -8,25 +8,18 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import {
-  Search, User, Trash2, ChevronDown, ChevronRight,
-  History, Clock, MapPin, Briefcase, Mail, Phone,
-  Users, UserCheck, Puzzle, FileText, Camera, Video,
-  Quote, Mic, Eye, Plus,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Search, UserCheck, Trash2, Eye, Users } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
 import { ItemDetailDialog } from "./ItemDetailDialog";
-import { AddFragmentDialog } from "./AddFragmentDialog";
+import { TemoinDashboard } from "./TemoinDashboard";
 import type {
   VictimeRow, TemoinRow, ParcoursRow, FragmentRow,
   SourceTemoignageRow,
 } from "@/integration/directus-types";
-import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { STATUT_ID } from "@/integration/directus-types";
 
-// =============================================================================
-// Types
-// =============================================================================
 interface DossiersPanelProps {
   victimes: VictimeRow[];
   temoins: TemoinRow[];
@@ -43,65 +36,13 @@ interface DossiersPanelProps {
   typeFragments: any[];
 }
 
-type StatutFilter = "tous" | "verifie" | "a_verifier" | "non_fiable";
-
-type DirectusCollection =
-  | "mmrl_victimes"
-  | "mmrl_temoins"
-  | "mmrl_parcours"
-  | "mmrl_fragments"
-  | "mmrl_sources_temoignage";
-
-const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL as string;
-
-const DEFAULT_STATUT = STATUT_ID.A_VERIFIER;
-
-/** Helper to get ID from a potentially expanded relation object */
 const getId = (val: any): number => {
   if (val == null) return 0;
   if (typeof val === 'object' && val.id !== undefined) return Number(val.id);
   return Number(val);
 };
 
-function normalizeStatutId(raw: any): number {
-  const id = getId(raw);
-  return id === 0 ? DEFAULT_STATUT : id;
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-/** Inline coloured status badge */
-function StatutBadge({
-  statut_id,
-  qualiteStatuts,
-}: {
-  statut_id: number;
-  qualiteStatuts: any[];
-}) {
-  const s = qualiteStatuts.find(x => x.id === statut_id);
-  if (!s) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">Statut #{statut_id}</span>;
-
-  const color = s.couleur_hex || '#666';
-  return (
-    <span
-      className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium"
-      style={{
-        borderColor: color + '50',
-        color: color,
-        backgroundColor: color + '15'
-      }}
-    >
-      {s.libelle}
-    </span>
-  );
-}
-
-/** Icon for a fragment type_id */
-
-// FIX : un seul composant StatutSelect (le doublon causait l'erreur de compilation)
-function StatutSelect({
+export function StatutSelect({
   value,
   options,
   onChange,
@@ -130,120 +71,48 @@ function StatutSelect({
   );
 }
 
-/** Icon for a fragment type_id */
-function FragmentTypeIcon({ type_id }: { type_id: number }) {
-  switch (type_id) {
-    case TYPE_FRAGMENT_ID.TEMOIGNAGE: return <Quote className="h-2 w-2 mr-1" />;
-    case TYPE_FRAGMENT_ID.PHOTOGRAPHIE: return <Camera className="h-2 w-2 mr-1" />;
-    case TYPE_FRAGMENT_ID.VIDEO: return <Video className="h-2 w-2 mr-1" />;
-    case TYPE_FRAGMENT_ID.AUDIO: return <Mic className="h-2 w-2 mr-1" />;
-    default: return <FileText className="h-2 w-2 mr-1" />;
-  }
-}
-
-// =============================================================================
-// Main component
-// =============================================================================
 export function DossiersPanel({
-  victimes,
-  temoins,
-  sources,
-  parcours,
-  fragments,
-  setVictimes,
-  setTemoins,
-  setSources,
-  setParcours,
-  setFragments,
-  onRefresh,
-  qualiteStatuts,
-  typeFragments,
+  victimes, temoins, sources, parcours, fragments,
+  setVictimes, setTemoins, setSources, setParcours, setFragments,
+  onRefresh, qualiteStatuts, typeFragments,
 }: DossiersPanelProps) {
   const [search, setSearch] = useState("");
-  const [filterStatut, setFilterStatut] = useState<StatutFilter>("tous");
-  const [expandedTemoins, setExpandedTemoins] = useState<Set<number>>(new Set());
-  const [expandedVictimes, setExpandedVictimes] = useState<Set<number>>(new Set());
-  
-  // Detail Dialog State
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailType, setDetailType] = useState<'victime' | 'temoin' | 'fragment' | 'parcours' | 'source'>('victime');
-  const [detailData, setDetailData] = useState<any>(null);
+  const [selectedTemoinId, setSelectedTemoinId] = useState<number | null>(null);
 
-  const toggleTemoin = (id: number) =>
-    setExpandedTemoins((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const toggleVictime = (id: number) =>
-    setExpandedVictimes((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const handleOpenDetail = (type: 'victime' | 'temoin' | 'fragment' | 'parcours' | 'source', data: any) => {
-    setDetailType(type);
-    setDetailData(data);
-    setDetailOpen(true);
+  const handleDelete = async (id: number) => {
+    if (!confirm("Archiver ce témoin/contributeur ?")) return;
+    try {
+      await directus.request(updateItem("mmrl_temoins" as any, id, { deleted_at: new Date().toISOString() }));
+      toast.success("Archivé avec succès");
+      onRefresh();
+    } catch (err: any) {
+      toast.error(`Erreur suppression : ${err?.message}`);
+    }
   };
 
-  // ---------------------------------------------------------------------------
-  // Status update with propagation
-  // ---------------------------------------------------------------------------
-  const handleStatus = async (
-    col: DirectusCollection,
-    id: number,
-    val: number
-  ) => {
+  const handleArchiveItem = async (collection: string, id: number) => {
+    if (!confirm("Voulez-vous vraiment archiver cet élément ? Il sera déplacé dans la corbeille.")) return;
+    try {
+      await directus.request(updateItem(collection as any, id, { deleted_at: new Date().toISOString() }));
+      toast.success("Élément archivé avec succès");
+      onRefresh();
+    } catch (err: any) {
+      toast.error(`Erreur d'archivage : ${err?.message}`);
+    }
+  };
+
+  const handleStatus = async (col: string, id: number, val: number) => {
     try {
       await directus.request(updateItem(col as any, id, { statut_id: val }));
 
       if (col === "mmrl_victimes") {
-        const v = victimes.find((x) => x.id === id);
-        const temoinId = v ? getId(v.auteur_temoin_id) : 0;
-        
-        if (temoinId) {
-          await directus.request(
-            updateItem("mmrl_temoins" as any, temoinId, { statut_id: val })
-          );
-          setTemoins((p) =>
-            p.map((t) => (t.id === temoinId ? { ...t, statut_id: val } : t))
-          );
-        }
-        setVictimes((p) =>
-          p.map((vv) => (vv.id === id ? { ...vv, statut_id: val } : vv))
-        );
+        setVictimes((p) => p.map((vv) => (vv.id === id ? { ...vv, statut_id: val } : vv)));
       } else if (col === "mmrl_temoins") {
-        const linked = victimes.filter((v) => getId(v.auteur_temoin_id) === id);
-        for (const v of linked) {
-          await directus.request(
-            updateItem("mmrl_victimes" as any, v.id, { statut_id: val })
-          );
-        }
-        setVictimes((p) =>
-          p.map((v) =>
-            getId(v.auteur_temoin_id) === id ? { ...v, statut_id: val } : v
-          )
-        );
-        setTemoins((p) =>
-          p.map((t) => (t.id === id ? { ...t, statut_id: val } : t))
-        );
-      } else if (col === "mmrl_sources_temoignage") {
-        setSources((p) =>
-          p.map((s) => (s.id === id ? { ...s, statut_id: val } : s))
-        );
+        setTemoins((p) => p.map((t) => (t.id === id ? { ...t, statut_id: val } : t)));
       } else if (col === "mmrl_parcours") {
-        setParcours((p) =>
-          p.map((e) => (e.id === id ? { ...e, statut_id: val } : e))
-        );
+        setParcours((p) => p.map((e) => (e.id === id ? { ...e, statut_id: val } : e)));
       } else if (col === "mmrl_fragments") {
-        setFragments((p) =>
-          p.map((f) => (f.id === id ? { ...f, statut_id: val } : f))
-        );
+        setFragments((p) => p.map((f) => (f.id === id ? { ...f, statut_id: val } : f)));
       }
 
       toast.success("Statut mis à jour");
@@ -253,59 +122,42 @@ export function DossiersPanel({
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Soft-delete
-  // ---------------------------------------------------------------------------
-  const handleDelete = async (col: DirectusCollection, id: number, setter: any) => {
-    if (!confirm("Archiver cet élément ?")) return;
-    try {
-      await directus.request(
-        updateItem(col as any, id, { deleted_at: new Date().toISOString() })
-      );
-      toast.success("Archivé avec succès");
-      onRefresh();
-    } catch (err: any) {
-      console.error("handleDelete error:", err);
-      toast.error(`Erreur suppression : ${err?.message ?? "inconnue"}`);
-    }
-  };
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-  const getSourceName = (id: number) => {
-    const s = sources.find((src) => src.id === id);
-    return s ? `${s.prenom} ${s.nom}` : `Source #${id}`;
-  };
-
-  // ---------------------------------------------------------------------------
-  // Filtered list
-  // ---------------------------------------------------------------------------
-  const q = search.toLowerCase();
-
-  const filteredTemoins = temoins.filter((t) => {
-    const myVictimes = victimes.filter((v) => getId(v.auteur_temoin_id) === t.id);
-    const matchTemoin = `${t.prenom} ${t.nom} ${t.email ?? ""}`.toLowerCase().includes(q);
-    const matchVictime = myVictimes.some((v) =>
-      `${v.prenom} ${v.nom}`.toLowerCase().includes(q)
+  const getStatutBadge = (statut_id: any) => {
+    const sid = getId(statut_id);
+    const qs = qualiteStatuts.find(q => q.id === sid);
+    const color = qs?.couleur_hex || '#aaa';
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium" style={{ borderColor: color + '50', color: color, backgroundColor: color + '15' }}>
+        {qs?.libelle || `Statut #${statut_id}`}
+      </span>
     );
-    const matchStatut =
-      filterStatut === "tous" ||
-      myVictimes.some((v) => {
-        const sid = normalizeStatutId(v.statut_id);
-        if (filterStatut === "verifie") return sid === STATUT_ID.VERIFIE;
-        if (filterStatut === "non_fiable") return sid === STATUT_ID.NON_FIABLE;
-        return sid === STATUT_ID.A_VERIFIER;
-      });
-    return (matchTemoin || matchVictime) && matchStatut;
+  };
+
+  // ── Render ──
+  const selectedTemoin = temoins.find(t => t.id === selectedTemoinId);
+
+  if (selectedTemoin) {
+    return (
+      <TemoinDashboard
+        temoin={selectedTemoin}
+        victimes={victimes}
+        fragments={fragments}
+        parcours={parcours}
+        qualiteStatuts={qualiteStatuts}
+        onBack={() => setSelectedTemoinId(null)}
+        onStatusChange={handleStatus}
+        onDelete={handleArchiveItem}
+      />
+    );
+  }
+
+  const q = search.toLowerCase();
+  const filteredTemoins = temoins.filter(t => {
+    return `${t.prenom} ${t.nom} ${t.email ?? ""}`.toLowerCase().includes(q);
   });
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
-    <div className="space-y-3">
-
+    <div className="space-y-4">
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap gap-3 items-center justify-between pb-2 border-b border-border">
         <div className="flex gap-3 flex-1 flex-wrap items-center">
@@ -314,276 +166,81 @@ export function DossiersPanel({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Nom, email, lieu…"
+              placeholder="Rechercher un contributeur..."
               className="pl-9 h-8 text-sm"
             />
           </div>
-          <Select
-            value={filterStatut}
-            onValueChange={(v) => setFilterStatut(v as StatutFilter)}
-          >
-            <SelectTrigger className="h-8 w-44 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tous">Tous les statuts</SelectItem>
-              <SelectItem value="a_verifier">🟡 À vérifier</SelectItem>
-              <SelectItem value="verifie">✔ Avéré</SelectItem>
-              <SelectItem value="non_fiable">✗ Non fiable</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-muted-foreground">
-            {victimes.length} victime{victimes.length > 1 ? "s" : ""} ·{" "}
-            {temoins.length} témoin{temoins.length > 1 ? "s" : ""}
+          <span className="text-xs text-muted-foreground mr-2">
+            {filteredTemoins.length} contributeur(s)
           </span>
           <AddVictimeDialog onSuccess={onRefresh} />
         </div>
       </div>
 
-      {/* ── Empty state ── */}
-      {filteredTemoins.length === 0 && (
-        <div className="text-center py-20 text-muted-foreground">
-          <Users className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>Aucun dossier trouvé.</p>
-        </div>
-      )}
-
-      {/* ── Témoin rows ── */}
-      {filteredTemoins.map((t) => {
-        const myVictimes = victimes.filter(
-          (v) => getId(v.auteur_temoin_id) === t.id
-        );
-        const temoinExpanded = expandedTemoins.has(t.id);
-
-        return (
-          <div
-            key={t.id}
-            className="border border-border rounded-xl overflow-hidden bg-card shadow-sm"
-          >
-            <div
-              className="flex items-center gap-3 px-4 py-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors select-none"
-              onClick={() => toggleTemoin(t.id)}
-            >
-              <span className="text-muted-foreground shrink-0">
-                {temoinExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-              </span>
-              <div className="w-9 h-9 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
-                <UserCheck className="h-4 w-4 text-muted-foreground/60" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-sm text-foreground">
-                    {t.prenom} {t.nom}
-                  </span>
-                  <StatutBadge statut_id={normalizeStatutId(t.statut_id)} qualiteStatuts={qualiteStatuts} />
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {myVictimes.length} victime{myVictimes.length > 1 ? "s" : ""}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground"
-                  onClick={() => handleOpenDetail('temoin', t)}
-                >
-                  <Eye size={13} />
-                </Button>
-                <StatutSelect
-                  value={normalizeStatutId(t.statut_id)}
-                  options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
-                  onChange={(val) => handleStatus("mmrl_temoins", t.id, val)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => handleDelete("mmrl_temoins", t.id, setTemoins)}
-                >
-                  <Trash2 size={13} />
-                </Button>
-              </div>
-            </div>
-
-            {temoinExpanded && (
-              <div className="divide-y divide-border/40">
-                {myVictimes.map((v) => {
-                  const vicParcours = parcours.filter((p) => getId(p.victime_id) === v.id).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
-                  const vicFragments = fragments.filter((f) => getId(f.victime_id) === v.id);
-                  const vicExpanded = expandedVictimes.has(v.id);
-                  const hasChildren = vicParcours.length > 0 || vicFragments.length > 0;
-
-                  return (
-                    <div key={v.id} className="bg-background">
-                      <div
-                        className="flex items-center gap-3 px-4 py-3 pl-10 cursor-pointer hover:bg-muted/20 transition-colors"
-                        onClick={() => hasChildren && toggleVictime(v.id)}
-                      >
-                        <span className="text-muted-foreground shrink-0">
-                          {hasChildren ? (vicExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <span className="w-3.5" />}
-                        </span>
-                        <div className="flex-1 font-semibold text-sm">
-                          {v.prenom} <span className="uppercase">{v.nom}</span>
-                          <StatutBadge statut_id={normalizeStatutId(v.statut_id)} qualiteStatuts={qualiteStatuts} />
-                        </div>
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground"
-                            onClick={() => handleOpenDetail('victime', v)}
-                          >
-                            <Eye size={13} />
-                          </Button>
-                          {v.source_id && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                              onClick={() => {
-                                const s = sources.find(src => src.id === getId(v.source_id));
-                                if (s) handleOpenDetail('source', s);
-                                else toast.error("Source introuvable");
-                              }}
-                              title="Voir la source du témoignage"
-                            >
-                              <FileText size={13} />
-                            </Button>
-                          )}
-                          <StatutSelect
-                            value={normalizeStatutId(v.statut_id)}
-                            options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
-                            onChange={(val) => handleStatus("mmrl_victimes", v.id, val)}
-                          />
-                          <AddVictimeDialog editVictime={v} onSuccess={onRefresh} triggerVariant="ghost" statuses={qualiteStatuts} />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive"
-                            onClick={() => handleDelete("mmrl_victimes", v.id, setVictimes)}
-                          >
-                            <Trash2 size={13} />
-                          </Button>
-                        </div>
+      {/* ── Contributeurs Table ── */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Contributeur (Témoin)</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Dossiers rattachés</TableHead>
+                <TableHead>Statut</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTemoins.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                    <Users className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                    Aucun contributeur trouvé.
+                  </TableCell>
+                </TableRow>
+              )}
+              {filteredTemoins.map((t) => {
+                const myVictimesCount = victimes.filter((v) => getId(v.auteur_temoin_id) === t.id).length;
+                return (
+                  <TableRow key={t.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedTemoinId(t.id)}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-primary" />
+                        {t.prenom} {t.nom}
                       </div>
-
-                      {vicExpanded && (
-                        <div className="pl-24 pr-4 pb-4 space-y-6">
-                          {vicParcours.length > 0 && (
-                            <div className="space-y-3">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                                <History size={10} /> Parcours
-                              </p>
-                              {vicParcours.map((p) => (
-                                <div 
-                                  key={p.id} 
-                                  className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/50"
-                                >
-                                  <span className="text-xs">{p.titre || p.description}</span>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-muted-foreground"
-                                      onClick={() => handleOpenDetail('parcours', p)}
-                                    >
-                                      <Eye size={12} />
-                                    </Button>
-                                    <StatutSelect
-                                      value={normalizeStatutId(p.statut_id)}
-                                      options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
-                                      onChange={(val) => handleStatus("mmrl_parcours", p.id, val)}
-                                    />
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-destructive"
-                                      onClick={() => handleDelete("mmrl_parcours", p.id, setParcours)}
-                                    >
-                                      <Trash2 size={12} />
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
-                                <Puzzle size={10} /> Fragments
-                              </p>
-                                <AddFragmentDialog 
-                                  victimeId={v.id} 
-                                  auteurTemoinId={getId(v.auteur_temoin_id)} 
-                                  onSuccess={onRefresh} 
-                                  qualiteStatuts={qualiteStatuts}
-                                  typeFragments={typeFragments}
-                                />
-                            </div>
-                            {vicFragments.length === 0 && (
-                              <p className="text-[10px] text-muted-foreground italic pl-4">Aucun fragment.</p>
-                            )}
-                            {vicFragments.map((f) => (
-                              <div 
-                                key={f.id} 
-                                className="flex items-center justify-between p-2 rounded-md bg-muted/20 border border-border/50 hover:bg-muted/30 transition-colors"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <Badge variant="outline" className="text-[9px] h-4 uppercase">
-                                    {f.type?.libelle || "Fragment"}
-                                  </Badge>
-                                  <span className="text-xs truncate max-w-[200px]">{f.titre || f.description}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground"
-                                    onClick={() => handleOpenDetail('fragment', f)}
-                                  >
-                                    <Eye size={12} />
-                                  </Button>
-                                  <StatutSelect
-                                    value={normalizeStatutId(f.statut_id)}
-                                    options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
-                                    onChange={(val) => handleStatus("mmrl_fragments", f.id, val)}
-                                  />
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive"
-                                    onClick={() => handleDelete("mmrl_fragments", f.id, setFragments)}
-                                  >
-                                    <Trash2 size={12} />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      <ItemDetailDialog 
-        isOpen={detailOpen} 
-        onClose={() => setDetailOpen(false)} 
-        type={detailType} 
-        data={detailData} 
-        qualiteStatuts={qualiteStatuts}
-        victimes={victimes}
-        temoins={temoins}
-        sources={sources}
-      />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{t.email || "—"}</TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        {myVictimesCount} victime(s)
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <StatutSelect
+                        value={getId(t.statut_id)}
+                        options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
+                        onChange={(val) => handleStatus("mmrl_temoins", t.id, val)}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" onClick={() => setSelectedTemoinId(t.id)}>
+                          <Eye size={16} />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(t.id)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

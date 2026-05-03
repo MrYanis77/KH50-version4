@@ -12,11 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { directus } from "@/integration/directus";
+import { directus, getAssetUrl } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
 import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
 import { toast } from "sonner";
 import { AddInformationDialog } from "@/components/AddInformationDialog";
+import FamilySpiderGraph from "@/components/FamilySpiderGraph";
+import SepultureVirtuelle from "@/components/SepultureVirtuelle";
 
 
 const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } };
@@ -43,7 +45,7 @@ const MemorialProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { person, fragments, parcours, loading, error } = useMemorialPerson(Number(id));
+  const { person, fragments, parcours, isVerified, loading, error } = useMemorialPerson(Number(id));
   const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'video' | 'image' | 'pdf' } | null>(null);
   const [showContributeForm, setShowContributeForm] = useState(false);
   const [showParcoursForm, setShowParcoursForm] = useState(false);
@@ -126,8 +128,7 @@ const MemorialProfile = () => {
     );
   }
 
-  // statut_id: 1=verifie, 2=a_verifier, 3=non_fiable
-  if (person.statut_id !== 1) {
+  if (!isVerified) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center space-y-4 max-w-lg p-8 border border-border rounded-xl bg-card shadow-sm">
@@ -139,7 +140,7 @@ const MemorialProfile = () => {
     );
   }
 
-  const imageSrc = `${import.meta.env.VITE_DIRECTUS_URL}/assets/${person.photo_principale}`;
+  const imageSrc = getAssetUrl(person.photo_principale);
 
   return (
     <div className="min-h-screen bg-background font-body">
@@ -246,6 +247,9 @@ const MemorialProfile = () => {
         </div>
       </motion.section>
 
+      {/* Liens de parenté (araignée généalogique) */}
+      <FamilySpiderGraph victime={person} />
+
       {/* Fragments de mémoire */}
       {fragments && fragments.length > 0 && (
         <motion.section
@@ -315,7 +319,7 @@ const MemorialProfile = () => {
                     <div className="mt-4">
                       {frag.type?.code === 'video' || frag.type_id === 3 ? (
                         <video 
-                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                          src={getAssetUrl(frag.fichier_media)} 
                           controls 
                           preload="metadata"
                           playsInline
@@ -323,18 +327,18 @@ const MemorialProfile = () => {
                         />
                       ) : frag.type?.code === 'audio' || frag.type_id === 7 ? (
                         <audio 
-                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                          src={getAssetUrl(frag.fichier_media)} 
                           controls 
                           preload="metadata"
                           className="w-full"
                         />
                       ) : (
                         <img 
-                            src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                            src={getAssetUrl(frag.fichier_media)} 
                             alt="Archive" 
                             className="max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
                             onClick={() => setLightboxMedia({ 
-                              url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`, 
+                              url: getAssetUrl(frag.fichier_media), 
                               type: frag.type?.code === 'document' ? 'pdf' : 'image' 
                             })}
                         />
@@ -374,11 +378,11 @@ const MemorialProfile = () => {
                       {item.fichier_media && (
                         <div className="mt-4 rounded-lg overflow-hidden border border-border max-w-sm">
                           <img 
-                            src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${item.fichier_media}`} 
+                            src={getAssetUrl(item.fichier_media)} 
                             alt="Document de parcours" 
                             className="w-full h-auto cursor-pointer hover:scale-105 transition-transform"
                             onClick={() => setLightboxMedia({ 
-                              url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${item.fichier_media}`, 
+                              url: getAssetUrl(item.fichier_media), 
                               type: 'image' // On suppose que c'est une image ici, ou pdf si on veut
                             })}
                           />
@@ -427,7 +431,7 @@ const MemorialProfile = () => {
                     frag.statut_id === 2 ? 'border-yellow-400' : 'border-border'
                   }`}
                   onClick={() => setLightboxMedia({ 
-                    url: `${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`, 
+                    url: getAssetUrl(frag.fichier_media), 
                     type: frag.type?.code === 'video' ? 'video' : 'image' 
                   })}
                 >
@@ -437,7 +441,7 @@ const MemorialProfile = () => {
                   {frag.type?.code === 'video' ? (
                     <div className="w-full h-full relative">
                       <video 
-                        src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}`} 
+                        src={getAssetUrl(frag.fichier_media)} 
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
@@ -446,7 +450,7 @@ const MemorialProfile = () => {
                     </div>
                   ) : (
                     <img 
-                      src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${frag.fichier_media}?width=400&height=400&fit=cover`} 
+                      src={getAssetUrl(frag.fichier_media, "width=400&height=400&fit=cover")} 
                       alt="Photo d'archive" 
                       className="w-full h-full object-cover"
                     />
@@ -561,6 +565,9 @@ const MemorialProfile = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Sépulture virtuelle */}
+      <SepultureVirtuelle victime={person} />
 
       {/* Footer */}
       <footer className="py-8 text-center text-xs text-muted-foreground border-t border-border mt-10">

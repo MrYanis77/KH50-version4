@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { directus } from "@/integration/directus";
+import { directus, getAssetUrl } from "@/integration/directus";
 import { readItems } from "@directus/sdk";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -186,7 +186,7 @@ const RecueilMemoires = () => {
                     <div className="aspect-video w-full overflow-hidden relative bg-black">
                       {(f.type_id === TYPE_FRAGMENT_ID.VIDEO || f.type?.code === 'video') ? (
                         <video 
-                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${f.fichier_media}`} 
+                          src={getAssetUrl(f.fichier_media)} 
                           className="w-full h-full object-cover"
                           onMouseOver={e => (e.target as HTMLVideoElement).play()}
                           onMouseOut={e => {
@@ -199,7 +199,7 @@ const RecueilMemoires = () => {
                         />
                       ) : (
                         <img 
-                          src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${f.fichier_media}?width=500&height=300&fit=cover`} 
+                          src={getAssetUrl(f.fichier_media, "width=500&height=300&fit=cover")} 
                           alt={f.titre || "Média"}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                         />

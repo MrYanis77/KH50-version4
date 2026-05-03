@@ -53,3 +53,10 @@ export const directusAuth = createDirectus<DirectusSchema>(DIRECTUS_URL)
     })
   )
   .with(rest());
+
+// ── Helper pour les assets ────────────────────────────────────────────────────
+export const getAssetUrl = (fileId: string | null | undefined, params: string = "") => {
+  if (!fileId) return "";
+  const queryString = params ? `&${params}` : "";
+  return `${DIRECTUS_URL}/assets/${fileId}?access_token=${ADMIN_TOKEN}${queryString}`;
+};

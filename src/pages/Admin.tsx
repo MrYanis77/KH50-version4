@@ -26,6 +26,7 @@ import AddVictimeDialog from "@/components/AddVictimeDialog";
 import { DossiersPanel } from "@/components/admin/DossiersPanel";
 import { LookupsPanel } from "@/components/admin/LookupsPanel";
 import { UsersPanel } from "@/components/admin/UsersPanel";
+import { ArchivePanel } from "@/components/admin/ArchivePanel";
 import { ItemDetailDialog } from "@/components/admin/ItemDetailDialog";
 
 const Admin = () => {
@@ -256,7 +257,7 @@ const Admin = () => {
                   onClick={() => setActiveTab("dossiers")}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "dossiers" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
-                  <GalleryVertical size={18} /> <span>Dossiers</span>
+                  <Users size={18} /> <span>Contributeurs</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab("fragments")}
@@ -280,7 +281,13 @@ const Admin = () => {
                   onClick={() => setActiveTab("users")}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "users" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
-                  <Users size={18} /> <span>Utilisateurs</span>
+                  <Shield size={18} /> <span>Comptes Membres</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab("archives")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-orange-600 ${activeTab === "archives" ? "bg-orange-100 dark:bg-orange-900/30 font-medium" : "hover:bg-muted"}`}
+                >
+                  <Trash2 size={18} /> <span>Archives & Corbeille</span>
                 </button>
               </nav>
             </div>
@@ -391,6 +398,11 @@ const Admin = () => {
               {/* ─── UTILISATEURS ─── */}
               <TabsContent value="users" className="mt-0">
                 <UsersPanel />
+              </TabsContent>
+
+              {/* ─── ARCHIVES ─── */}
+              <TabsContent value="archives" className="mt-0">
+                <ArchivePanel />
               </TabsContent>
             </Tabs>
           </main>

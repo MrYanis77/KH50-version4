@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import memorialConcept from "@/assets/memorial-concept.png";
 import type { VictimeRow } from "@/integration/directus-types";
+import { getAssetUrl } from "@/integration/directus";
 import { useAuth } from "@/contexts/AuthContext";
 
 const MemorialWall = () => {
@@ -200,7 +201,7 @@ const MemorialWall = () => {
             <div className="h-24 bg-muted/50 flex items-center justify-center overflow-hidden relative">
               {hoveredPerson.photo_principale ? (
                 <img
-                  src={`${import.meta.env.VITE_DIRECTUS_URL}/assets/${hoveredPerson.photo_principale}?width=288&height=96&fit=cover`}
+                  src={getAssetUrl(hoveredPerson.photo_principale, "width=288&height=96&fit=cover")}
                   alt=""
                   className="w-full h-full object-cover opacity-80"
                 />

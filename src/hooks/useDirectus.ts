@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { readItems, readItem, createItem } from "@directus/sdk";
 import { directus } from "@/integration/directus";
 import type {
   VictimeRow, FragmentRow, TemoinRow, ParcoursRow,
-  SourceTemoignageRow, QualiteStatutRow, TypeFragmentRow
+  SourceTemoignageRow, QualiteStatutRow, TypeFragmentRow,
+  RelationFamilialeRow, SepultureRow
 } from "@/integration/directus-types";
 import { STATUT_ID } from "@/integration/directus-types";
 
@@ -16,17 +17,20 @@ export function useMemorialPersons() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    directus
-      .request(
-        readItems("mmrl_victimes", {
-          filter: {
-            statut_id: { show_on_wall: { _eq: true } },
-            deleted_at: { _null: true },
-          },
-          limit: -1,
-        })
-      )
-      .then((data) => setPeople(data as unknown as VictimeRow[]))
+    Promise.all([
+      directus.request(readItems("mmrl_victimes", { filter: { deleted_at: { _null: true } }, limit: -1 })),
+      directus.request(readItems("mmrl_qualite_statut", { limit: -1 }))
+    ])
+      .then(([victimesData, statutsData]) => {
+        const validStatutIds = (statutsData as QualiteStatutRow[]).filter(s => s.show_on_wall).map(s => s.id);
+        
+        const filteredVictims = (victimesData as unknown as VictimeRow[]).filter(v => {
+          const sid = typeof v.statut_id === 'object' ? (v.statut_id as any)?.id : v.statut_id;
+          return validStatutIds.includes(Number(sid));
+        });
+        
+        setPeople(filteredVictims);
+      })
       .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -43,6 +47,7 @@ export function useMemorialPerson(id: number) {
   const [parcours, setParcours] = useState<ParcoursRow[]>([]);
   const [temoin, setTemoin] = useState<TemoinRow | null>(null);
   const [source, setSource] = useState<SourceTemoignageRow | null>(null);
+  const [isVerified, setIsVerified] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,12 +68,28 @@ export function useMemorialPerson(id: number) {
           sort: ["ordre", "annee_evenement"],
         })
       ).catch(() => []),
+      directus.request(readItems("mmrl_qualite_statut", { limit: -1 })).catch(() => [])
     ])
-      .then(async ([p, f, pc]) => {
+      .then(async ([p, f, pc, statutsData]) => {
+        const validStatutIds = (statutsData as QualiteStatutRow[]).filter(s => s.show_on_wall).map(s => s.id);
+
         const personData = p as unknown as VictimeRow;
         setPerson(personData);
-        setFragments(f as unknown as FragmentRow[]);
-        setParcours(pc as unknown as ParcoursRow[]);
+        
+        const personSid = typeof personData.statut_id === 'object' ? (personData.statut_id as any)?.id : personData.statut_id;
+        setIsVerified(validStatutIds.includes(Number(personSid)));
+        
+        const filteredFragments = (f as unknown as FragmentRow[]).filter(frag => {
+          const sid = typeof frag.statut_id === 'object' ? (frag.statut_id as any)?.id : frag.statut_id;
+          return validStatutIds.includes(Number(sid));
+        });
+        setFragments(filteredFragments);
+
+        const filteredParcours = (pc as unknown as ParcoursRow[]).filter(parc => {
+          const sid = typeof parc.statut_id === 'object' ? (parc.statut_id as any)?.id : parc.statut_id;
+          return validStatutIds.includes(Number(sid));
+        });
+        setParcours(filteredParcours);
 
         // Charger l'auteur (témoin)
         if (personData.auteur_temoin_id) {
@@ -90,7 +111,7 @@ export function useMemorialPerson(id: number) {
       .finally(() => setLoading(false));
   }, [id]);
 
-  return { person, fragments, parcours, temoin, source, loading, error };
+  return { person, fragments, parcours, temoin, source, isVerified, loading, error };
 }
 
 // =============================================================================
@@ -166,4 +187,105 @@ export function useAdminData() {
     loading, error, collectionErrors, refreshAction,
     setVictimes, setTemoins, setSources, setParcours, setFragments,
   };
+}
+
+// =============================================================================
+// Hook — liens de parenté (« araignée ») d'une victime
+// =============================================================================
+export function useRelationsFamiliales(victimeId: number | null | undefined) {
+  const [relations, setRelations] = useState<RelationFamilialeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!victimeId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    directus
+      .request(
+        readItems("mmrl_relations_familiales", {
+          filter: {
+            _and: [
+              { deleted_at: { _null: true } },
+              {
+                _or: [
+                  { victime_id_a: { _eq: victimeId } },
+                  { victime_id_b: { _eq: victimeId } },
+                ],
+              },
+            ],
+          },
+          fields: ["*", "victime_id_b.id", "victime_id_b.prenom", "victime_id_b.nom", "victime_id_b.photo_principale", "victime_id_b.statut_id", "victime_id_a.id", "victime_id_a.prenom", "victime_id_a.nom", "victime_id_a.photo_principale", "victime_id_a.statut_id"],
+          limit: -1,
+        })
+      )
+      .then((data) => {
+        const rows = data as unknown as RelationFamilialeRow[];
+        // Normalise : victime_b représente toujours « l'autre » vis-à-vis de victimeId
+        const normalised = rows.map((r: any) => {
+          const aId = typeof r.victime_id_a === 'object' ? r.victime_id_a?.id : r.victime_id_a;
+          const bId = typeof r.victime_id_b === 'object' ? r.victime_id_b?.id : r.victime_id_b;
+          const otherIsA = Number(aId) !== Number(victimeId) && Number(bId) === Number(victimeId);
+          const autre = otherIsA ? r.victime_id_a : r.victime_id_b;
+          return {
+            ...r,
+            victime_id_a: typeof r.victime_id_a === 'object' ? r.victime_id_a?.id : r.victime_id_a,
+            victime_id_b: typeof r.victime_id_b === 'object' ? r.victime_id_b?.id : r.victime_id_b,
+            victime_b: autre && typeof autre === 'object' ? autre : null,
+          } as RelationFamilialeRow;
+        });
+        setRelations(normalised);
+        setError(null);
+      })
+      .catch((e: any) => setError(e.message || "Erreur inconnue"))
+      .finally(() => setLoading(false));
+  }, [victimeId, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  return { relations, loading, error, refresh };
+}
+
+// =============================================================================
+// Hook — sépulture virtuelle d'une victime
+// =============================================================================
+export function useSepulture(victimeId: number | null | undefined) {
+  const [sepulture, setSepulture] = useState<SepultureRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!victimeId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    directus
+      .request(
+        readItems("mmrl_sepultures", {
+          filter: {
+            victime_id: { _eq: victimeId },
+            deleted_at: { _null: true },
+          },
+          limit: 1,
+        })
+      )
+      .then((data) => {
+        const arr = data as unknown as SepultureRow[];
+        setSepulture(arr.length > 0 ? arr[0] : null);
+        setError(null);
+      })
+      .catch((e: any) => setError(e.message || "Erreur inconnue"))
+      .finally(() => setLoading(false));
+  }, [victimeId, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  return { sepulture, loading, error, refresh };
 }

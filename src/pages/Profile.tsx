@@ -6,18 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { User, MessageSquare, Settings, LogOut, Loader2, Clock, CheckCircle, AlertCircle, Lock } from "lucide-react";
-import type { FragmentRow, QualiteStatutRow } from "@/integration/directus-types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import type { FragmentRow, QualiteStatutRow, VictimeRow, RelationFamilialeRow } from "@/integration/directus-types";
+import { TYPE_RELATION_LABELS } from "@/integration/directus-types";
+import { Users, Link as LinkIcon, Pencil, Trash2 } from "lucide-react";
+import AddVictimeDialog from "@/components/AddVictimeDialog";
+import { deleteItem } from "@directus/sdk";
 
 const Profile = () => {
   const { user, temoin, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fragments, setFragments] = useState<FragmentRow[]>([]);
+  const [victimes, setVictimes] = useState<VictimeRow[]>([]);
+  const [relations, setRelations] = useState<RelationFamilialeRow[]>([]);
   const [statuts, setStatuts] = useState<QualiteStatutRow[]>([]);
+  const [archives, setArchives] = useState<any[]>([]);
   const [fetchingFragments, setFetchingFragments] = useState(true);
 
   // Form states
@@ -36,45 +44,130 @@ const Profile = () => {
     }
   }, [user]);
 
-  useEffect(() => {
-    const fetchUserContent = async () => {
-      // Attendre que les données d'authentification soient prêtes
-      if (!user || !temoin) {
-        return;
-      }
+  const fetchUserContent = async () => {
+    // Attendre que les données d'authentification soient prêtes
+    if (!user || !temoin) {
+      return;
+    }
+    
+    try {
+      setFetchingFragments(true);
       
-      try {
-        setFetchingFragments(true);
-        
-        // 1. Récupérer les fragments (on utilise l'API admin pour contourner d'éventuels blocages de permissions)
-        const fragmentsData = await directus.request(
-          readItems("mmrl_fragments", {
-            filter: {
-              auteur_temoin_id: { _eq: Number(temoin.id) },
-              deleted_at: { _null: true }
-            },
-            sort: ["-date_creation"],
-            fields: ["*", "statut_id.*"]
-          })
-        );
-        
-        setFragments(fragmentsData as unknown as FragmentRow[]);
+      // 1. Récupérer les fragments
+      const fragmentsData = await directus.request(
+        readItems("mmrl_fragments", {
+          filter: {
+            auteur_temoin_id: { _eq: Number(temoin.id) },
+            deleted_at: { _null: true }
+          },
+          sort: ["-date_creation"],
+          fields: ["*", "statut_id.*"]
+        })
+      );
+      setFragments(fragmentsData as unknown as FragmentRow[]);
 
-        // 2. Récupérer les statuts pour la correspondance des badges
-        const statutsData = await directus.request(
-          readItems("mmrl_qualite_statut", { limit: -1 })
-        );
-        setStatuts(statutsData as unknown as QualiteStatutRow[]);
-      } catch (error) {
-        console.error("[Profile] Error fetching content:", error);
-        toast.error("Impossible de charger vos témoignages");
-      } finally {
-        setFetchingFragments(false);
-      }
-    };
+      // 2. Récupérer les victimes
+      const victimesData = await directus.request(
+        readItems("mmrl_victimes", {
+          filter: {
+            auteur_temoin_id: { _eq: Number(temoin.id) },
+            deleted_at: { _null: true }
+          },
+          sort: ["-date_creation"],
+          fields: ["*", "statut_id.*"]
+        })
+      );
+      setVictimes(victimesData as unknown as VictimeRow[]);
 
+      // 3. Récupérer les relations familiales
+      const relationsData = await directus.request(
+        readItems("mmrl_relations_familiales", {
+          filter: {
+            auteur_temoin_id: { _eq: Number(temoin.id) },
+            deleted_at: { _null: true }
+          },
+          sort: ["-date_creation"],
+          fields: ["*", "victime_id_a.prenom", "victime_id_a.nom", "victime_id_b.prenom", "victime_id_b.nom", "statut_id.*"]
+        })
+      );
+      setRelations(relationsData as unknown as RelationFamilialeRow[]);
+
+      // 4. Récupérer les statuts pour la correspondance des badges
+      const statutsData = await directus.request(
+        readItems("mmrl_qualite_statut", { limit: -1 })
+      );
+      setStatuts(statutsData as unknown as QualiteStatutRow[]);
+      // 5. Récupérer les archives de l'utilisateur
+      const [archVictimes, archFragments, archParcours, archRelations] = await Promise.all([
+        directus.request(readItems("mmrl_victimes", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => []),
+        directus.request(readItems("mmrl_fragments", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => []),
+        directus.request(readItems("mmrl_parcours", { filter: { victime_id: { auteur_temoin_id: { _eq: Number(temoin.id) } }, deleted_at: { _nnull: true } } })).catch(() => []),
+        directus.request(readItems("mmrl_relations_familiales", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => [])
+      ]);
+
+      const allArchives = [
+        ...archVictimes.map((v: any) => ({ ...v, _type: 'Victime', _collection: 'mmrl_victimes', _title: `${v.prenom} ${v.nom}` })),
+        ...archFragments.map((f: any) => ({ ...f, _type: 'Fragment', _collection: 'mmrl_fragments', _title: f.titre || f.description?.substring(0,50) })),
+        ...archParcours.map((p: any) => ({ ...p, _type: 'Parcours', _collection: 'mmrl_parcours', _title: p.titre || p.description?.substring(0,50) })),
+        ...archRelations.map((r: any) => ({ ...r, _type: 'Lien Familial', _collection: 'mmrl_relations_familiales', _title: `Lien ID ${r.id}` }))
+      ].sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime());
+
+      setArchives(allArchives);
+
+    } catch (error) {
+      console.error("[Profile] Error fetching content:", error);
+      toast.error("Impossible de charger vos données");
+    } finally {
+      setFetchingFragments(false);
+    }
+  };
+
+  useEffect(() => {
     fetchUserContent();
   }, [temoin?.id, user?.id]);
+
+  const handleDeleteRelation = async (id: number) => {
+    if (!confirm("Voulez-vous vraiment archiver ce lien de parenté ?")) return;
+    try {
+      await directusAuth.request(updateItem("mmrl_relations_familiales", id, { deleted_at: new Date().toISOString() }));
+      toast.success("Lien de parenté archivé.");
+      fetchUserContent();
+    } catch (error) {
+      toast.error("Erreur lors de l'archivage.");
+    }
+  };
+
+  const handleArchiveItem = async (collection: string, id: number) => {
+    if (!confirm("Voulez-vous vraiment supprimer cet élément ? Il sera placé dans vos archives.")) return;
+    try {
+      await directusAuth.request(updateItem(collection as any, id, { deleted_at: new Date().toISOString() }));
+      toast.success("Élément placé dans vos archives.");
+      fetchUserContent();
+    } catch (error) {
+      toast.error("Erreur lors de la suppression.");
+    }
+  };
+
+  const handleRestoreItem = async (collection: string, id: number) => {
+    if (!confirm("Voulez-vous restaurer cet élément ?")) return;
+    try {
+      await directusAuth.request(updateItem(collection as any, id, { deleted_at: null }));
+      toast.success("Élément restauré.");
+      fetchUserContent();
+    } catch (error) {
+      toast.error("Erreur lors de la restauration.");
+    }
+  };
+
+  const handleDownloadArchive = (item: any) => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(item, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `archive_${item._type}_${item.id}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,14 +273,26 @@ const Profile = () => {
         </div>
 
         <Tabs defaultValue="testimonials" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+          <TabsList className="grid w-full grid-cols-5 max-w-[900px] mb-8">
             <TabsTrigger value="testimonials" className="gap-2">
               <MessageSquare size={16} />
-              Mes Témoignages
+              <span className="hidden sm:inline">Témoignages</span>
+            </TabsTrigger>
+            <TabsTrigger value="victimes" className="gap-2">
+              <Users size={16} />
+              <span className="hidden sm:inline">Personnes</span>
+            </TabsTrigger>
+            <TabsTrigger value="relations" className="gap-2">
+              <LinkIcon size={16} />
+              <span className="hidden sm:inline">Liens</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings size={16} />
-              Paramètres
+              <span className="hidden sm:inline">Paramètres</span>
+            </TabsTrigger>
+            <TabsTrigger value="archives" className="gap-2 text-orange-600 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">
+              <Trash2 size={16} />
+              <span className="hidden sm:inline">Archives</span>
             </TabsTrigger>
           </TabsList>
 
@@ -310,7 +415,17 @@ const Profile = () => {
                                 Publié le {format(new Date(fragment.date_creation), "PPP", { locale: fr })}
                               </p>
                             </div>
-                            {getStatusBadge(fragment.statut_id)}
+                            <div className="flex items-center gap-3">
+                              {getStatusBadge(fragment.statut_id)}
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:bg-destructive/10" 
+                                onClick={() => handleArchiveItem("mmrl_fragments", fragment.id)}
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
                           </div>
                           
                           <p className="text-sm text-foreground/80 line-clamp-3 leading-relaxed">
@@ -340,6 +455,197 @@ const Profile = () => {
                     <Button variant="outline" className="mt-6" asChild>
                       <a href="/memorial">Parcourir le mémorial</a>
                     </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="victimes" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-end mb-4">
+              <AddVictimeDialog onSuccess={fetchUserContent} statuses={statuts} />
+            </div>
+            <div className="grid gap-4">
+              {fetchingFragments ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p>Chargement de vos personnes...</p>
+                </div>
+              ) : victimes.length > 0 ? (
+                victimes.map((victime) => (
+                  <Card key={victime.id} className="overflow-hidden hover:border-primary/30 transition-colors">
+                    <CardContent className="p-0">
+                      <div className="flex flex-col md:flex-row">
+                        <div className="flex-1 p-6 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                                {victime.prenom} {victime.nom}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Ajouté le {victime.date_creation ? format(new Date(victime.date_creation), "PPP", { locale: fr }) : "Date inconnue"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {getStatusBadge(victime.statut_id)}
+                              <AddVictimeDialog 
+                                editVictime={victime} 
+                                onSuccess={fetchUserContent} 
+                                statuses={statuts}
+                                triggerVariant="ghost"
+                              />
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:bg-destructive/10" 
+                                onClick={() => handleArchiveItem("mmrl_victimes", victime.id)}
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <p className="text-sm text-foreground/80 line-clamp-3 leading-relaxed">
+                            {victime.annee_naissance ? `Né(e) en ${victime.annee_naissance}` : "Année de naissance inconnue"} 
+                            {victime.lieu_naissance ? ` à ${victime.lieu_naissance}` : ""}
+                            {" - "}
+                            {victime.annee_deces ? `Décédé(e) en ${victime.annee_deces}` : "Année de décès inconnue"}
+                            {victime.lieu_deces ? ` à ${victime.lieu_deces}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <Users className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">Aucune personne pour le moment</h3>
+                    <p className="text-muted-foreground max-w-xs mt-2">
+                      Les personnes que vous ajoutez au mémorial apparaîtront ici.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="relations" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid gap-4">
+              {fetchingFragments ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p>Chargement de vos liens de parenté...</p>
+                </div>
+              ) : relations.length > 0 ? (
+                relations.map((relation) => {
+                  const vA = relation.victime_id_a as any;
+                  const vB = relation.victime_id_b as any;
+                  return (
+                    <Card key={relation.id} className="overflow-hidden hover:border-primary/30 transition-colors">
+                      <CardContent className="p-0">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="flex-1 p-6 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                                  {vA?.prenom} {vA?.nom} 
+                                  <span className="text-muted-foreground mx-2 font-normal text-sm">
+                                    {TYPE_RELATION_LABELS[relation.type_relation] || relation.type_relation} de
+                                  </span>
+                                  {vB ? `${vB.prenom} ${vB.nom}` : relation.nom_relatif_externe}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  Ajouté le {relation.date_creation ? format(new Date(relation.date_creation), "PPP", { locale: fr }) : "Date inconnue"}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {getStatusBadge(relation.statut_id)}
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="text-destructive hover:bg-destructive/10" 
+                                  onClick={() => handleDeleteRelation(relation.id)}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {relation.description && (
+                              <p className="text-sm text-foreground/80 line-clamp-3 leading-relaxed">
+                                {relation.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <LinkIcon className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">Aucun lien de parenté pour le moment</h3>
+                    <p className="text-muted-foreground max-w-xs mt-2">
+                      Les liens familiaux que vous ajoutez apparaîtront ici.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ─── ARCHIVES TAB CONTENT ─── */}
+          <TabsContent value="archives" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid gap-4">
+              {fetchingFragments ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p>Chargement de vos archives...</p>
+                </div>
+              ) : archives.length > 0 ? (
+                archives.map((archive) => (
+                  <Card key={`${archive._collection}_${archive.id}`} className="overflow-hidden opacity-80 bg-muted/30">
+                    <CardContent className="p-0">
+                      <div className="flex flex-col md:flex-row">
+                        <div className="flex-1 p-6 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline">{archive._type}</Badge>
+                                <span className="text-xs text-muted-foreground">Archivé le {format(new Date(archive.deleted_at), "PPP", { locale: fr })}</span>
+                              </div>
+                              <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                                {archive._title}
+                              </h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" onClick={() => handleDownloadArchive(archive)}>Télécharger (JSON)</Button>
+                              <Button variant="outline" size="sm" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleRestoreItem(archive._collection, archive.id)}>Restaurer</Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <Trash2 className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">Votre corbeille est vide</h3>
+                    <p className="text-muted-foreground max-w-xs mt-2">
+                      Les éléments que vous supprimez apparaîtront ici pour que vous puissiez les restaurer.
+                    </p>
                   </CardContent>
                 </Card>
               )}
