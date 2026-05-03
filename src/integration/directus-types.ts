@@ -15,6 +15,7 @@ export interface DirectusSchema {
   mmrl_fragments: FragmentRow[];
   mmrl_relations_familiales: RelationFamilialeRow[];
   mmrl_sepultures: SepultureRow[];
+  mmrl_recueil: RecueilRow[];
   directus_files: DirectusFilesRow[];
   directus_users: DirectusUsersRow[];
 }
@@ -296,3 +297,25 @@ export const TYPE_SEPULTURE_LABELS: Record<TypeSepulture, string> = {
   autel: 'Autel',
   jardin: 'Jardin du souvenir',
 };
+
+/** mmrl_recueil — carnet de mémoires personnel d'un témoin */
+export interface RecueilRow {
+  id: number;
+  /** FK → mmrl_temoins.id */
+  auteur_temoin_id: number;
+  /** FK → mmrl_type_fragment.id */
+  type_id: number;
+  type?: TypeFragmentRow;
+  titre?: string | null;
+  contenu?: string | null;
+  /** FK → directus_files.id */
+  fichier_media?: string | null;
+  /** Visibilité choisie par l'utilisateur : true = public, false = privé */
+  is_public: boolean;
+  /** FK → mmrl_qualite_statut.id */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}

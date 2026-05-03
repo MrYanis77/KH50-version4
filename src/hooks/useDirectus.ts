@@ -4,7 +4,7 @@ import { directus } from "@/integration/directus";
 import type {
   VictimeRow, FragmentRow, TemoinRow, ParcoursRow,
   SourceTemoignageRow, QualiteStatutRow, TypeFragmentRow,
-  RelationFamilialeRow, SepultureRow
+  RelationFamilialeRow, SepultureRow, RecueilRow
 } from "@/integration/directus-types";
 import { STATUT_ID } from "@/integration/directus-types";
 
@@ -288,4 +288,92 @@ export function useSepulture(victimeId: number | null | undefined) {
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   return { sepulture, loading, error, refresh };
+}
+
+// =============================================================================
+// Hook — recueil public (entrées publiques validées)
+// =============================================================================
+export function usePublicRecueil() {
+  const [entries, setEntries] = useState<RecueilRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setLoading(true);
+    directus
+      .request(
+        readItems("mmrl_recueil", {
+          filter: {
+            is_public: { _eq: true },
+            deleted_at: { _null: true },
+          },
+          fields: ["*", "type_id.*", "statut_id.*"],
+          sort: ["-date_creation"],
+          limit: -1,
+        })
+      )
+      .then((data) => {
+        setEntries(data as unknown as RecueilRow[]);
+        setError(null);
+      })
+      .catch((e: any) => setError(e.message || "Erreur inconnue"))
+      .finally(() => setLoading(false));
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  return { entries, loading, error, refresh };
+}
+
+// =============================================================================
+// Hook — recueil personnel d'un témoin (toutes entrées non-archivées)
+// =============================================================================
+export function useMyRecueil(temoinId: number | null | undefined) {
+  const [entries, setEntries] = useState<RecueilRow[]>([]);
+  const [archives, setArchives] = useState<RecueilRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!temoinId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([
+      directus.request(
+        readItems("mmrl_recueil", {
+          filter: {
+            auteur_temoin_id: { _eq: temoinId },
+            deleted_at: { _null: true },
+          },
+          fields: ["*", "type_id.*", "statut_id.*"],
+          sort: ["-date_creation"],
+          limit: -1,
+        })
+      ).catch(() => []),
+      directus.request(
+        readItems("mmrl_recueil", {
+          filter: {
+            auteur_temoin_id: { _eq: temoinId },
+            deleted_at: { _nnull: true },
+          },
+          fields: ["*", "type_id.*", "statut_id.*"],
+          sort: ["-deleted_at"],
+          limit: -1,
+        })
+      ).catch(() => []),
+    ])
+      .then(([active, archived]) => {
+        setEntries(active as unknown as RecueilRow[]);
+        setArchives(archived as unknown as RecueilRow[]);
+        setError(null);
+      })
+      .catch((e: any) => setError(e.message || "Erreur inconnue"))
+      .finally(() => setLoading(false));
+  }, [temoinId, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  return { entries, archives, loading, error, refresh };
 }

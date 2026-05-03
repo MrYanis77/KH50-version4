@@ -1,267 +1,386 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { directus, getAssetUrl } from "@/integration/directus";
-import { readItems } from "@directus/sdk";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { directusAuth, getAssetUrl } from "@/integration/directus";
+import { createItem, updateItem } from "@directus/sdk";
+import { usePublicRecueil } from "@/hooks/useDirectus";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BookOpen, Plus, Search, Filter, Lock, Globe,
-  MessageSquare, Camera, Video, FileText, Mic,
-  ChevronRight, Calendar, User, ArrowRight
-} from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 import { motion } from "framer-motion";
-import type { FragmentRow, VictimeRow } from "@/integration/directus-types";
-import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import {
+  BookOpen, Plus, Search, Lock, Globe,
+  MessageSquare, Camera, Video, FileText, Mic,
+  ChevronRight, Loader2, ArrowRight, Upload
+} from "lucide-react";
+import type { RecueilRow } from "@/integration/directus-types";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
-const RecueilMemoires = () => {
-  const { user } = useAuth();
-  const [fragments, setFragments] = useState<FragmentRow[]>([]);
-  const [victimes, setVictimes] = useState<VictimeRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const TYPE_OPTIONS = [
+  { id: 1, code: "temoignage", label: "Témoignage écrit",  icon: MessageSquare },
+  { id: 2, code: "photographie", label: "Photographie",      icon: Camera },
+  { id: 3, code: "video",   label: "Vidéo",              icon: Video },
+  { id: 4, code: "recit",   label: "Récit",              icon: FileText },
+  { id: 7, code: "audio",   label: "Enregistrement audio", icon: Mic },
+];
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // On utilise allSettled pour ne pas tout bloquer si une collection a un souci
-        const results = await Promise.allSettled([
-          directus.request(readItems("mmrl_fragments", {
-            fields: ["*", "statut_id.*", "type_id.*"],
-            filter: {
-              statut_id: { _eq: 1 },
-              deleted_at: { _null: true }
-            },
-            sort: ["-date_creation"]
-          })),
-          directus.request(readItems("mmrl_victimes", {
-            fields: ["id", "prenom", "nom"],
-            filter: { deleted_at: { _null: true } }
-          }))
-        ]);
+const getTypeIcon = (code: string | undefined) => {
+  const t = TYPE_OPTIONS.find(t => t.code === code);
+  const Icon = t?.icon || BookOpen;
+  return <Icon className="h-4 w-4" />;
+};
 
-        if (results[0].status === "fulfilled") {
-          setFragments(results[0].value as unknown as FragmentRow[]);
-        } else {
-          console.error("Fragments load failed:", results[0].reason);
-        }
+const getTypeLabel = (code: string | undefined) => {
+  return TYPE_OPTIONS.find(t => t.code === code)?.label || "Autre";
+};
 
-        if (results[1].status === "fulfilled") {
-          setVictimes(results[1].value as unknown as VictimeRow[]);
-        } else {
-          console.error("Victimes load failed:", results[1].reason);
-        }
+const isVideo = (code?: string) => code === "video";
+const isAudio = (code?: string) => code === "audio";
+const isPhoto = (code?: string) => code === "photographie";
 
-      } catch (error: any) {
-        console.error("Error fetching memories:", error);
-      } finally {
-        setLoading(false);
+// ---------------------------------------------------------------------------
+// AddRecueilDialog
+// ---------------------------------------------------------------------------
+interface AddDialogProps {
+  temoinId: number;
+  onSuccess: () => void;
+}
+
+const AddRecueilDialog = ({ temoinId, onSuccess }: AddDialogProps) => {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [titre, setTitre] = useState("");
+  const [contenu, setContenu] = useState("");
+  const [typeId, setTypeId] = useState("1");
+  const [isPublic, setIsPublic] = useState(true);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contenu.trim() && !mediaFile) {
+      toast.error("Veuillez saisir un contenu ou joindre un fichier.");
+      return;
+    }
+    setSaving(true);
+    try {
+      let fichierMediaId: string | null = null;
+
+      // Upload file if present
+      if (mediaFile) {
+        const formData = new FormData();
+        formData.append("file", mediaFile);
+        const resp = await fetch("/files", {
+          method: "POST",
+          body: formData,
+        }).then(r => r.json());
+        fichierMediaId = resp.data?.id || null;
       }
-    };
-    fetchData();
-  }, []);
 
-  const getVictimeName = (id: number) => {
-    const v = victimes.find(v => v.id === id);
-    return v ? `${v.prenom} ${v.nom}` : "Inconnu";
-  };
+      await directusAuth.request(
+        createItem("mmrl_recueil", {
+          auteur_temoin_id: temoinId,
+          type_id: Number(typeId),
+          titre: titre.trim() || null,
+          contenu: contenu.trim() || null,
+          fichier_media: fichierMediaId,
+          is_public: isPublic,
+          statut_id: 2, // À vérifier par défaut
+        })
+      );
 
-  const getIcon = (typeCode: string) => {
-    switch (typeCode) {
-      case "temoignage": return <MessageSquare className="h-4 w-4" />;
-      case "photographie": return <Camera className="h-4 w-4" />;
-      case "video": return <Video className="h-4 w-4" />;
-      case "recit": return <FileText className="h-4 w-4" />;
-      case "audio": return <Mic className="h-4 w-4" />;
-      default: return <BookOpen className="h-4 w-4" />;
+      toast.success("Votre entrée a été ajoutée au recueil !");
+      setOpen(false);
+      setTitre(""); setContenu(""); setTypeId("1"); setIsPublic(true); setMediaFile(null);
+      onSuccess();
+    } catch (err) {
+      toast.error("Erreur lors de la création. Vérifiez vos permissions.");
+      console.error(err);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const filteredFragments = fragments.filter(f => {
-    const matchesSearch = 
-      f.titre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      f.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getVictimeName(f.victime_id).toLowerCase().includes(searchTerm.toLowerCase());
-    if (activeTab === "all") return matchesSearch;
-    
-    const typeCode = f.type?.code || '';
-    const typeId = f.type_id;
-    
-    const isMatch = typeCode === activeTab || 
-      (activeTab === 'temoignage' && typeId === TYPE_FRAGMENT_ID.TEMOIGNAGE) ||
-      (activeTab === 'photographie' && typeId === TYPE_FRAGMENT_ID.PHOTOGRAPHIE) ||
-      (activeTab === 'video' && typeId === TYPE_FRAGMENT_ID.VIDEO);
-      
-    return matchesSearch && isMatch;
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="rounded-full px-8 h-12 gap-2">
+          <Plus className="h-4 w-4" /> Ajouter au recueil
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Nouvelle entrée au recueil</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+          {/* Type */}
+          <div className="space-y-1.5">
+            <Label>Type de contenu</Label>
+            <Select value={typeId} onValueChange={setTypeId}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TYPE_OPTIONS.map(t => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    <span className="flex items-center gap-2">
+                      <t.icon className="h-4 w-4" /> {t.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Titre */}
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-titre">Titre (optionnel)</Label>
+            <Input id="rec-titre" value={titre} onChange={e => setTitre(e.target.value)} placeholder="Donnez un titre à votre témoignage" />
+          </div>
+
+          {/* Contenu texte */}
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-contenu">Contenu / Description</Label>
+            <Textarea
+              id="rec-contenu"
+              value={contenu}
+              onChange={e => setContenu(e.target.value)}
+              placeholder="Rédigez votre témoignage, décrivez votre photo ou votre enregistrement..."
+              rows={5}
+              className="resize-none"
+            />
+          </div>
+
+          {/* Fichier */}
+          <div className="space-y-1.5">
+            <Label>Fichier joint (photo, vidéo, audio)</Label>
+            <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+              <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+              <span className="text-sm text-muted-foreground">
+                {mediaFile ? mediaFile.name : "Cliquez pour choisir un fichier"}
+              </span>
+              <input type="file" className="hidden" accept="image/*,video/*,audio/*" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+
+          {/* Visibilité */}
+          <div className="flex items-center justify-between rounded-xl border border-border p-4">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{isPublic ? "Public" : "Privé"}</p>
+              <p className="text-xs text-muted-foreground">
+                {isPublic
+                  ? "Visible par tous les visiteurs du site"
+                  : "Visible uniquement par vous dans votre profil"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+              <Globe className="h-4 w-4 text-primary" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Publier
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// RecueilCard
+// ---------------------------------------------------------------------------
+const RecueilCard = ({ entry }: { entry: RecueilRow }) => {
+  const typeCode = (entry.type as any)?.code || "";
+  const typeLabel = (entry.type as any)?.libelle || getTypeLabel(typeCode);
+
+  return (
+    <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col">
+      {/* Media preview */}
+      {entry.fichier_media && (
+        <div className="aspect-video w-full overflow-hidden relative bg-black">
+          {isVideo(typeCode) ? (
+            <video
+              src={getAssetUrl(entry.fichier_media)}
+              className="w-full h-full object-cover"
+              onMouseOver={e => (e.target as HTMLVideoElement).play()}
+              onMouseOut={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
+              muted playsInline preload="metadata"
+            />
+          ) : isAudio(typeCode) ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 gap-3 p-4">
+              <Mic className="h-12 w-12 text-primary/40" />
+              <audio src={getAssetUrl(entry.fichier_media)} controls className="w-full max-w-xs" />
+            </div>
+          ) : (
+            <img
+              src={getAssetUrl(entry.fichier_media, "width=500&height=300&fit=cover")}
+              alt={entry.titre || "Média"}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            />
+          )}
+          <div className="absolute top-3 right-3 flex gap-1.5">
+            <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm border-none gap-1.5 px-2 py-1">
+              {getTypeIcon(typeCode)}
+              <span className="text-[10px] uppercase font-bold">{typeLabel}</span>
+            </Badge>
+          </div>
+        </div>
+      )}
+
+      <CardContent className="p-6 flex-grow flex flex-col">
+        {!entry.fichier_media && (
+          <div className="flex items-center gap-2 mb-4">
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-none gap-1.5 px-2 py-1">
+              {getTypeIcon(typeCode)}
+              <span className="text-[10px] uppercase font-bold">{typeLabel}</span>
+            </Badge>
+          </div>
+        )}
+
+        <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors line-clamp-2">
+          {entry.titre || "Témoignage sans titre"}
+        </h3>
+
+        {entry.contenu && (
+          <p className="text-sm text-muted-foreground mb-4 line-clamp-3 leading-relaxed flex-grow">
+            {entry.contenu}
+          </p>
+        )}
+
+        <div className="pt-4 mt-auto border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {entry.date_creation
+              ? format(new Date(entry.date_creation), "d MMM yyyy", { locale: fr })
+              : "—"}
+          </span>
+          <span className="flex items-center gap-1">
+            <Globe className="h-3 w-3" /> Public
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+const RecueilMemoires = () => {
+  const { user, temoin } = useAuth();
+  const { entries, loading, refresh } = usePublicRecueil();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
+
+  const filtered = entries.filter(e => {
+    const code = (e.type as any)?.code || "";
+    const matchSearch =
+      (e.titre?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (e.contenu?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+    const matchTab = activeTab === "all" || code === activeTab;
+    return matchSearch && matchTab;
   });
 
   return (
     <div className="min-h-screen bg-background">
-      
-      
-      {/* Hero Section */}
+
+      {/* Hero */}
       <section className="relative py-20 overflow-hidden border-b">
         <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
         <div className="container relative z-10 px-6 mx-auto">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-3xl"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl">
             <Badge variant="outline" className="mb-4 border-primary/30 text-primary px-3 py-1 uppercase tracking-wider text-[10px] font-bold">
-              Transmission & Mémoire
+              Transmission &amp; Mémoire
             </Badge>
             <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-6 leading-tight">
-              Recueil de mémoires <span className="text-primary">&</span> témoignages
+              Recueil de mémoires <span className="text-primary">&amp;</span> témoignages
             </h1>
             <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-              Un espace dédié à la préservation des récits familiaux. Permettez aux parents de laisser 
-              une trace indélébile à leurs enfants et petits-enfants, à travers l'écrit, l'image et le son.
+              Un espace dédié à la préservation des récits familiaux. Écrits, photos, enregistrements audio et vidéos — laissez une trace indélébile pour les générations futures.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to={user ? "/memorial" : "/auth"}>
-                <Button className="rounded-full px-8 h-12 gap-2">
-                  <Plus className="h-4 w-4" /> Laisser une trace
-                </Button>
-              </Link>
-              <Button variant="outline" className="rounded-full px-8 h-12 gap-2" onClick={() => document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' })}>
-                Explorer le recueil <ArrowRight className="h-4 w-4" />
+              {user && temoin ? (
+                <AddRecueilDialog temoinId={temoin.id} onSuccess={refresh} />
+              ) : (
+                <a href="/auth">
+                  <Button className="rounded-full px-8 h-12 gap-2">
+                    <Plus className="h-4 w-4" /> Contribuer
+                  </Button>
+                </a>
+              )}
+              <Button variant="outline" className="rounded-full px-8 h-12 gap-2" onClick={() => document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" })}>
+                Explorer <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Main Content */}
+      {/* Content */}
       <main id="explore" className="container px-6 py-16 mx-auto">
+
+        {/* Filters bar */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Rechercher par nom, titre ou contenu..." 
+            <Input
+              placeholder="Rechercher dans le recueil..."
               className="pl-10 rounded-full bg-muted/30 border-muted-foreground/20 focus:border-primary/50"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
-          
+
           <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={setActiveTab}>
-            <TabsList className="bg-muted/50 rounded-full p-1">
-              <TabsTrigger value="all" className="rounded-full px-5 text-xs">Tous</TabsTrigger>
-              <TabsTrigger value="temoignage" className="rounded-full px-5 text-xs gap-1.5">
-                <MessageSquare className="h-3 w-3" /> Témoignages
-              </TabsTrigger>
-              <TabsTrigger value="photographie" className="rounded-full px-5 text-xs gap-1.5">
-                <Camera className="h-3 w-3" /> Photos
-              </TabsTrigger>
-              <TabsTrigger value="video" className="rounded-full px-5 text-xs gap-1.5">
-                <Video className="h-3 w-3" /> Vidéos
-              </TabsTrigger>
+            <TabsList className="bg-muted/50 rounded-full p-1 flex-wrap">
+              <TabsTrigger value="all" className="rounded-full px-4 text-xs">Tous</TabsTrigger>
+              <TabsTrigger value="temoignage" className="rounded-full px-4 text-xs gap-1.5"><MessageSquare className="h-3 w-3" /> Témoignages</TabsTrigger>
+              <TabsTrigger value="photographie" className="rounded-full px-4 text-xs gap-1.5"><Camera className="h-3 w-3" /> Photos</TabsTrigger>
+              <TabsTrigger value="video" className="rounded-full px-4 text-xs gap-1.5"><Video className="h-3 w-3" /> Vidéos</TabsTrigger>
+              <TabsTrigger value="audio" className="rounded-full px-4 text-xs gap-1.5"><Mic className="h-3 w-3" /> Audio</TabsTrigger>
+              <TabsTrigger value="recit" className="rounded-full px-4 text-xs gap-1.5"><FileText className="h-3 w-3" /> Récits</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
+        {/* Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="h-64 rounded-2xl bg-muted animate-pulse" />
-            ))}
+            {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-64 rounded-2xl bg-muted animate-pulse" />)}
           </div>
-        ) : filteredFragments.length > 0 ? (
+        ) : filtered.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredFragments.map((f, idx) => (
+            {filtered.map((entry, idx) => (
               <motion.div
-                key={f.id}
+                key={entry.id}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.05 }}
               >
-                <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col">
-                  {f.fichier_media && (
-                    <div className="aspect-video w-full overflow-hidden relative bg-black">
-                      {(f.type_id === TYPE_FRAGMENT_ID.VIDEO || f.type?.code === 'video') ? (
-                        <video 
-                          src={getAssetUrl(f.fichier_media)} 
-                          className="w-full h-full object-cover"
-                          onMouseOver={e => (e.target as HTMLVideoElement).play()}
-                          onMouseOut={e => {
-                            (e.target as HTMLVideoElement).pause();
-                            (e.target as HTMLVideoElement).currentTime = 0;
-                          }}
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
-                      ) : (
-                        <img 
-                          src={getAssetUrl(f.fichier_media, "width=500&height=300&fit=cover")} 
-                          alt={f.titre || "Média"}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                        />
-                      )}
-                      <div className="absolute top-3 right-3">
-                        <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm border-none gap-1.5 px-2 py-1">
-                          {getIcon(f.type_id?.code || f.type?.code || "other")}
-                          <span className="text-[10px] uppercase font-bold">{f.type_id?.libelle || f.type?.libelle}</span>
-                        </Badge>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <CardContent className="p-6 flex-grow flex flex-col">
-                    {!f.fichier_media && (
-                      <div className="flex items-center gap-2 mb-4">
-                        <Badge variant="secondary" className="bg-primary/10 text-primary border-none gap-1.5 px-2 py-1">
-                          {getIcon(f.type_id?.code || f.type?.code || "other")}
-                          <span className="text-[10px] uppercase font-bold">{f.type_id?.libelle || f.type?.libelle}</span>
-                        </Badge>
-                      </div>
-                    )}
-                    
-                    <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors line-clamp-1">
-                      {f.titre || "Témoignage sans titre"}
-                    </h3>
-                    
-                    <p className="text-sm text-muted-foreground mb-6 line-clamp-3 leading-relaxed flex-grow">
-                      {f.description}
-                    </p>
-                    
-                    <div className="pt-4 mt-auto border-t border-border/50 flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1">
-                          Mémoire de
-                        </span>
-                        <Link 
-                          to={`/memorial/${f.victime_id}`}
-                          className="text-sm font-semibold hover:text-primary transition-colors flex items-center gap-1"
-                        >
-                          {getVictimeName(f.victime_id)}
-                          <ChevronRight className="h-3 w-3" />
-                        </Link>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <span className="text-[10px] font-mono">
-                          {f.date_fragment ? new Date(f.date_fragment).getFullYear() : f.annee_fragment || "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <RecueilCard entry={entry} />
               </motion.div>
             ))}
           </div>
         ) : (
           <div className="text-center py-20 bg-muted/20 rounded-3xl border-2 border-dashed border-muted">
             <BookOpen className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-xl font-bold mb-2">Aucun témoignage trouvé</h3>
+            <h3 className="text-xl font-bold mb-2">Aucune entrée trouvée</h3>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Nous n'avons pas trouvé de mémoires correspondant à vos critères de recherche.
+              Soyez le premier à contribuer à ce recueil ou ajustez vos filtres.
             </p>
             <Button variant="outline" onClick={() => { setSearchTerm(""); setActiveTab("all"); }}>
               Réinitialiser les filtres
@@ -270,47 +389,33 @@ const RecueilMemoires = () => {
         )}
       </main>
 
-      {/* Submission CTA */}
+      {/* CTA */}
       <section className="py-20 bg-primary/5">
         <div className="container px-6 mx-auto">
           <div className="max-w-4xl mx-auto bg-card border border-border/50 rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center gap-12 shadow-2xl">
             <div className="flex-1 text-center md:text-left">
               <h2 className="text-3xl font-display font-bold mb-4">Contribuer au recueil</h2>
               <p className="text-muted-foreground mb-6">
-                Vous possédez des documents, des enregistrements ou des récits ? 
+                Vous possédez des documents, des enregistrements ou des récits ?
                 Aidez-nous à construire ce mémorial vivant pour les générations futures.
               </p>
               <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="flex items-center gap-2 text-sm text-foreground/80">
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Mic className="h-4 w-4 text-primary" />
+                {TYPE_OPTIONS.map(t => (
+                  <div key={t.id} className="flex items-center gap-2 text-sm text-foreground/80">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <t.icon className="h-4 w-4 text-primary" />
+                    </div>
+                    {t.label}
                   </div>
-                  Audio
-                </div>
-                <div className="flex items-center gap-2 text-sm text-foreground/80">
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Camera className="h-4 w-4 text-primary" />
-                  </div>
-                  Photos
-                </div>
-                <div className="flex items-center gap-2 text-sm text-foreground/80">
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Video className="h-4 w-4 text-primary" />
-                  </div>
-                  Vidéos
-                </div>
-                <div className="flex items-center gap-2 text-sm text-foreground/80">
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FileText className="h-4 w-4 text-primary" />
-                  </div>
-                  Écrits
-                </div>
+                ))}
               </div>
-              <Link to={user ? "/memorial" : "/auth"}>
-                <Button className="w-full md:w-auto px-10 h-12 rounded-full">
-                  Déposer un témoignage
-                </Button>
-              </Link>
+              {user && temoin ? (
+                <AddRecueilDialog temoinId={temoin.id} onSuccess={refresh} />
+              ) : (
+                <a href="/auth">
+                  <Button className="w-full md:w-auto px-10 h-12 rounded-full">Déposer un témoignage</Button>
+                </a>
+              )}
             </div>
             <div className="hidden md:block w-64 h-64 relative">
               <div className="absolute inset-0 bg-primary/10 rounded-full animate-pulse" />
