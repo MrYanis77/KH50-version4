@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { directusAuth } from '@/integration/directus';
-import { readItems, updateItem } from '@directus/sdk';
+import { readItems, updateItem, deleteItem } from '@directus/sdk';
 import type { NotificationRow } from '@/integration/directus-types';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -62,5 +62,40 @@ export function useNotifications() {
     }
   };
 
-  return { notifications, unreadCount, markAsRead, markAllAsRead, refresh: fetchNotifications };
+  const deleteNotification = async (id: number) => {
+    try {
+      await directusAuth.request(deleteItem('mmrl_notifications' as any, id));
+      setNotifications(prev => {
+        const next = prev.filter(n => n.id !== id);
+        setUnreadCount(next.filter(n => !n.lu).length);
+        return next;
+      });
+    } catch (err) {
+      console.error('Error deleting notification', err);
+    }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (notifications.length === 0) return;
+    try {
+      for (const id of notifications.map(n => n.id)) {
+        await directusAuth.request(deleteItem('mmrl_notifications' as any, id));
+      }
+      setNotifications([]);
+      setUnreadCount(0);
+      await fetchNotifications();
+    } catch (err) {
+      console.error('Error deleting all notifications', err);
+    }
+  };
+
+  return {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    deleteAllNotifications,
+    refresh: fetchNotifications,
+  };
 }

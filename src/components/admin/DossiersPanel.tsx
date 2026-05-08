@@ -13,7 +13,7 @@ import { TemoinDashboard } from "./TemoinDashboard";
 import { StatutSelect } from "./StatutSelect";
 import type {
   VictimeRow, ParcoursRow, FragmentRow,
-  SourceTemoignageRow,
+  SourceTemoignageRow, RecueilRow,
 } from "@/integration/directus-types";
 import { notifyContributorOnStatutChange } from "@/services/notificationService";
 
@@ -23,6 +23,7 @@ interface DossiersPanelProps {
   sources: SourceTemoignageRow[];
   parcours: ParcoursRow[];
   fragments: FragmentRow[];
+  recueil?: RecueilRow[];
   setVictimes: (fn: (prev: VictimeRow[]) => VictimeRow[]) => void;
   setUsers: (fn: (prev: any[]) => any[]) => void;
   setSources: (fn: (prev: SourceTemoignageRow[]) => SourceTemoignageRow[]) => void;
@@ -40,7 +41,7 @@ const getId = (val: any): number => {
 };
 
 export function DossiersPanel({
-  victimes, users, sources, parcours, fragments,
+  victimes, users, sources, parcours, fragments, recueil = [],
   setVictimes, setUsers, setSources, setParcours, setFragments,
   onRefresh, qualiteStatuts, typeFragments,
 }: DossiersPanelProps) {
@@ -87,6 +88,7 @@ export function DossiersPanel({
         victimes,
         fragments,
         parcours,
+        recueil,
       });
 
       toast.success("Statut mis à jour");

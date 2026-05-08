@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { readItems, readItem, createItem, readUsers } from "@directus/sdk";
-import { directus } from "@/integration/directus";
+import { directus, directusAuth } from "@/integration/directus";
 import type {
   VictimeRow, FragmentRow, TemoinRow, ParcoursRow,
   SourceTemoignageRow, QualiteStatutRow, TypeFragmentRow,
@@ -122,6 +122,7 @@ export function useAdminData() {
   const [sources, setSources] = useState<SourceTemoignageRow[]>([]);
   const [parcours, setParcours] = useState<ParcoursRow[]>([]);
   const [fragments, setFragments] = useState<FragmentRow[]>([]);
+  const [recueil, setRecueil] = useState<RecueilRow[]>([]);
   const [qualiteStatuts, setQualiteStatuts] = useState<QualiteStatutRow[]>([]);
   const [typeFragments, setTypeFragments] = useState<TypeFragmentRow[]>([]);
   const [refreshCount, setRefreshCount] = useState(0);
@@ -139,6 +140,23 @@ export function useAdminData() {
         directus.request(readUsers({ limit: -1, fields: ["id", "first_name", "last_name", "email"] })),
         directus.request(readItems("mmrl_qualite_statut", { limit: -1, fields: ["*"] })),
         directus.request(readItems("mmrl_type_fragment", { limit: -1, fields: ["*"] })),
+        directus.request(
+          readItems("mmrl_recueil", {
+            limit: -1,
+            filter: {
+              _and: [{ deleted_at: { _null: true } }, { is_public: { _eq: true } }],
+            },
+            fields: [
+              "*",
+              "type_id.*",
+              "statut_id.*",
+              "fichier_media.id",
+              "fichier_media.filename_download",
+              "fichier_media.type",
+            ],
+            sort: ["-date_creation"],
+          })
+        ),
       ]);
 
       const errors: Record<string, string> = {};
@@ -159,6 +177,10 @@ export function useAdminData() {
 
       if (results[5].status === "fulfilled") setQualiteStatuts(results[5].value as unknown as QualiteStatutRow[]);
       if (results[6].status === "fulfilled") setTypeFragments(results[6].value as unknown as TypeFragmentRow[]);
+
+      if (results[7].status === "fulfilled") setRecueil(results[7].value as unknown as RecueilRow[]);
+      else if (results[7].status === "rejected")
+        errors.recueil = (results[7] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
 
       setCollectionErrors(errors);
 
@@ -181,9 +203,9 @@ export function useAdminData() {
   };
 
   return {
-    victimes, users, sources, parcours, fragments, qualiteStatuts, typeFragments,
+    victimes, users, sources, parcours, fragments, recueil, qualiteStatuts, typeFragments,
     loading, error, collectionErrors, refreshAction,
-    setVictimes, setUsers, setSources, setParcours, setFragments,
+    setVictimes, setUsers, setSources, setParcours, setFragments, setRecueil,
   };
 }
 
@@ -349,6 +371,113 @@ export function usePublicRecueil() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   return { entries, loading, error, refresh };
+}
+
+const RECUEIL_DETAIL_FIELDS = [
+  "*",
+  "type_id.*",
+  "statut_id.*",
+  "auteur_user.first_name",
+  "auteur_user.last_name",
+  "fichier_media.id",
+  "fichier_media.filename_download",
+  "fichier_media.type",
+] as const;
+
+/**
+ * Détail recueil : entrée publique validée (lecture anonyme), ou entrée dont l’utilisateur connecté est l’auteur
+ * (y compris brouillon / privée).
+ */
+export function useRecueilDetail(recueilId: number | null | undefined, viewerUserId: string | null | undefined) {
+  const [entry, setEntry] = useState<RecueilRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (recueilId == null || !Number.isFinite(Number(recueilId))) {
+      setEntry(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    const id = Number(recueilId);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const publicRows = await directus.request(
+          readItems("mmrl_recueil", {
+            filter: {
+              _and: [
+                { id: { _eq: id } },
+                { deleted_at: { _null: true } },
+                { is_public: { _eq: true } },
+                { statut_id: { _eq: STATUT_ID.VERIFIE } },
+              ],
+            },
+            fields: [...RECUEIL_DETAIL_FIELDS],
+            limit: 1,
+          })
+        );
+        const pub = (publicRows as unknown as RecueilRow[])[0];
+        if (pub) {
+          if (!cancelled) {
+            setEntry(pub);
+            setError(null);
+          }
+          return;
+        }
+
+        if (viewerUserId) {
+          const mine = await directusAuth.request(
+            readItems("mmrl_recueil", {
+              filter: {
+                _and: [
+                  { id: { _eq: id } },
+                  { auteur_user_id: { _eq: viewerUserId } },
+                  { deleted_at: { _null: true } },
+                ],
+              },
+              fields: [...RECUEIL_DETAIL_FIELDS],
+              limit: 1,
+            })
+          );
+          const row = (mine as unknown as RecueilRow[])[0];
+          if (!cancelled) {
+            if (row) {
+              setEntry(row);
+              setError(null);
+            } else {
+              setEntry(null);
+              setError("Entrée introuvable ou vous n'avez pas l'autorisation d'y accéder.");
+            }
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setEntry(null);
+          setError("Entrée introuvable ou non publiée.");
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erreur inconnue";
+        if (!cancelled) {
+          setEntry(null);
+          setError(msg);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recueilId, viewerUserId]);
+
+  return { entry, loading, error };
 }
 
 // =============================================================================

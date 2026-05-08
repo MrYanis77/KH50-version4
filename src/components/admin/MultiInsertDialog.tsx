@@ -326,11 +326,13 @@ function toRecueilInsert(row: FormRow): MmrlRecueilInsert | null {
   const pub = row.is_public;
   const is_public = pub === true || pub === "true" || String(pub) === "1";
 
+  const defaultStatut = is_public ? STATUT_ID.A_VERIFIER : STATUT_ID.VERIFIE;
+
   const out: MmrlRecueilInsert = {
     auteur_user_id,
     type_id,
     is_public,
-    statut_id: normalizeStatut(row, STATUT_ID.A_VERIFIER),
+    statut_id: normalizeStatut(row, defaultStatut),
   };
   const titre = String(row.titre ?? "").trim();
   if (titre) out.titre = titre;

@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ChevronDown, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChronologieHistoriqueList } from "@/components/archives/ChronologieHistoriqueList";
 
 /* ─── data (shared with Archives) ─── */
 
@@ -15,16 +15,6 @@ const temoignages = [
   { title: "Le silence de Kampong Cham", desc: "Témoignage d'un ancien instituteur sur la fermeture des écoles.", type: "podcast" as const, year: 1976 },
   { title: "Retrouvailles à Paris", desc: "Un frère et une sœur se retrouvent après 30 ans de séparation.", type: "video" as const, year: 2008 },
   { title: "Les rizières de sang", desc: "Journal d'un paysan forcé de travailler dans les champs collectifs.", type: "text" as const, year: 1977 },
-];
-
-const chronologie = [
-  { year: "1970", title: "Coup d'État de Lon Nol", desc: "Renversement du prince Sihanouk. Le Cambodge entre dans une guerre civile dévastatrice." },
-  { year: "1975", title: "Prise de Phnom Penh par les Khmers rouges", desc: "Le 17 avril 1975, les Khmers rouges entrent dans la capitale et ordonnent l'évacuation totale de la ville." },
-  { year: "1975–1979", title: "Régime des Khmers rouges", desc: "Sous Pol Pot, le régime instaure une dictature agraire responsable de la mort de près de deux millions de personnes." },
-  { year: "1979", title: "Fin du régime", desc: "L'intervention vietnamienne met fin au régime. Le pays entame un long processus de reconstruction." },
-  { year: "1980–1991", title: "Occupation et guerre civile", desc: "Le Cambodge est occupé par le Vietnam. Une guérilla persiste dans les zones frontalières." },
-  { year: "1991", title: "Accords de Paris", desc: "Les accords de paix sont signés, ouvrant la voie à des élections supervisées par l'ONU." },
-  { year: "2006", title: "Création du tribunal ECCC", desc: "Les Chambres extraordinaires au sein des tribunaux cambodgiens commencent à juger les responsables du génocide." },
 ];
 
 const lieux = [
@@ -73,7 +63,7 @@ type CategoryKey = "temoignages" | "chronologie" | "lieux" | "documents" | "tran
 
 const categoryConfig: Record<CategoryKey, { label: string; desc: string; icon: React.ReactNode }> = {
   temoignages: { label: "Témoignages", desc: "Récits de survivants, mémoires transmises et voix préservées.", icon: <Mic size={22} /> },
-  chronologie: { label: "Chronologie historique", desc: "Les événements clés du génocide cambodgien.", icon: <Book size={22} /> },
+  chronologie: { label: "Chronologie historique", desc: "De la colonisation à la mémoire diasporique : jalons historiques.", icon: <Book size={22} /> },
   lieux: { label: "Lieux de mémoire", desc: "Lieux historiques liés au génocide et à la mémoire collective.", icon: <MapPin size={22} /> },
   documents: { label: "Archives et documents", desc: "Documents historiques, registres et photographies d'archives.", icon: <FileText size={22} /> },
   transmission: { label: "Transmission et mémoire", desc: "Projets et initiatives dédiés à la préservation de la mémoire.", icon: <Users size={22} /> },
@@ -127,33 +117,7 @@ const TemoignagesGrid = () => (
   </div>
 );
 
-const ChronologieList = () => {
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
-  return (
-    <div className="max-w-2xl">
-      {chronologie.map((item, i) => (
-        <motion.div key={item.year} custom={i} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}
-          className="relative pl-8 pb-10 last:pb-0 group">
-          <div className="absolute left-[11px] top-3 bottom-0 w-px bg-border group-last:hidden" />
-          <div className="absolute left-0 top-2 w-[23px] h-[23px] rounded-full border-2 border-accent bg-background flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-accent" />
-          </div>
-          <button onClick={() => setOpenIdx(openIdx === i ? null : i)} className="w-full text-left" aria-expanded={openIdx === i}>
-            <span className="text-sm font-body font-semibold text-brand-burnt tracking-wide">{item.year}</span>
-            <h3 className="font-display text-lg text-foreground mt-1 flex items-center gap-2">
-              {item.title}
-              <ChevronDown size={16} className={`text-muted-foreground transition-transform ${openIdx === i ? "rotate-180" : ""}`} />
-            </h3>
-          </button>
-          {openIdx === i && (
-            <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-              className="font-body text-sm text-muted-foreground mt-2 leading-relaxed max-w-lg">{item.desc}</motion.p>
-          )}
-        </motion.div>
-      ))}
-    </div>
-  );
-};
+const ChronologieList = () => <ChronologieHistoriqueList />;
 
 const LieuxGrid = () => (
   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

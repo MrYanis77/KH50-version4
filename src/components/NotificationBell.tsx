@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, Info, FileText, Edit, ShieldCheck, XCircle } from 'lucide-react';
+import { Bell, Check, Info, FileText, Edit, ShieldCheck, XCircle, Trash2 } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { NotificationType } from '@/integration/directus-types';
 
 export function NotificationBell() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    deleteAllNotifications,
+  } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -67,13 +74,29 @@ export function NotificationBell() {
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-popover border border-border shadow-lg rounded-md z-50 overflow-hidden flex flex-col max-h-[80vh]">
-          <div className="flex items-center justify-between p-3 border-b bg-muted/30">
-            <h3 className="font-semibold text-sm">Notifications</h3>
-            {unreadCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-auto p-1 text-xs text-muted-foreground hover:text-foreground">
-                <Check className="h-3 w-3 mr-1" /> Tout marquer comme lu
-              </Button>
-            )}
+          <div className="flex flex-col gap-2 p-3 border-b bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+            <h3 className="font-semibold text-sm shrink-0">Notifications</h3>
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              {unreadCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-auto p-1 text-xs text-muted-foreground hover:text-foreground">
+                  <Check className="h-3 w-3 mr-1" /> Tout marquer comme lu
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm('Supprimer toutes les notifications affichées ?')) {
+                      void deleteAllNotifications();
+                    }
+                  }}
+                  className="h-auto p-1 text-xs text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" /> Tout supprimer
+                </Button>
+              )}
+            </div>
           </div>
           
           <div className="overflow-y-auto flex-1">
@@ -83,15 +106,15 @@ export function NotificationBell() {
               </div>
             ) : (
               notifications.map((notif) => (
-                <div 
-                  key={notif.id} 
+                <div
+                  key={notif.id}
                   className={`p-3 border-b last:border-0 flex gap-3 transition-colors ${notif.lu ? 'bg-background' : 'bg-primary/5 cursor-pointer hover:bg-primary/10'}`}
                   onClick={() => !notif.lu && markAsRead(notif.id)}
                 >
                   <div className="mt-0.5 flex-shrink-0">
                     {getIcon(notif.type)}
                   </div>
-                  <div className="flex-1 space-y-1">
+                  <div className="flex-1 space-y-1 min-w-0">
                     <p className={`text-sm ${notif.lu ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
                       {notif.message}
                     </p>
@@ -99,11 +122,22 @@ export function NotificationBell() {
                       {formatDate(notif.date_creation)}
                     </p>
                   </div>
-                  {!notif.lu && (
-                    <div className="flex-shrink-0 flex items-center">
-                      <div className="h-2 w-2 rounded-full bg-primary"></div>
-                    </div>
-                  )}
+                  <div className="flex-shrink-0 flex items-center gap-1">
+                    {!notif.lu && <div className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Supprimer cette notification"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteNotification(notif.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))
             )}

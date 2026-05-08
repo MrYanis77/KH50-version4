@@ -16,6 +16,7 @@ import Index from "./pages/index.tsx";
 import Admin from "./pages/Admin.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
 import RecueilMemoires from "./pages/RecueilMemoires.tsx";
+import RecueilDetail from "./pages/RecueilDetail.tsx";
 import Profile from "./pages/Profile.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/reset-password" element={<MainLayout><ResetPassword /></MainLayout>} />
             <Route path="/memorial/:id" element={<MainLayout><MemorialProfile /></MainLayout>} />
             <Route path="/memorial" element={<MainLayout><MemorialWall /></MainLayout>} />
+            <Route path="/recueil/:id" element={<MainLayout><RecueilDetail /></MainLayout>} />
             <Route path="/recueil" element={<MainLayout><RecueilMemoires /></MainLayout>} />
             
             <Route path="/admin" element={<AdminRoute><MainLayout><Admin /></MainLayout></AdminRoute>} />

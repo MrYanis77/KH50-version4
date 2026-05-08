@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { directus, directusAuth } from "@/integration/directus";
+import { directus, directusAuth, getAssetUrlWithViewerToken, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
 import { updateMe, readItems, updateItem } from "@directus/sdk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { FragmentRow, QualiteStatutRow, VictimeRow, RelationFamilialeRow, RecueilRow, ParcoursRow, TypeFragmentRow } from "@/integration/directus-types";
 import { TYPE_RELATION_LABELS } from "@/integration/directus-types";
-import { Users, Link as LinkIcon, Pencil, Trash2, BookOpen, Globe, Plus, GalleryVertical } from "lucide-react";
+import { Users, Link as LinkIcon, Pencil, Trash2, BookOpen, Globe, Plus, GalleryVertical, Mic } from "lucide-react";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
 import { ProfileFragmentDialog } from "@/components/profile/ProfileFragmentDialog";
 import { ProfileParcoursDialog } from "@/components/profile/ProfileParcoursDialog";
@@ -103,7 +104,7 @@ const Profile = () => {
               deleted_at: { _null: true }
             },
             sort: ["-date_creation"],
-            fields: ["*", "statut_id.*", "type_id.*"]
+            fields: ["*", "statut_id.*", "type_id.*", "fichier_media.id", "fichier_media.filename_download", "fichier_media.type"],
           })
         ),
         directus.request(readItems("mmrl_qualite_statut", { limit: -1 })),
@@ -438,12 +439,36 @@ const Profile = () => {
                   <Card key={entry.id} className="overflow-hidden hover:border-primary/30 transition-colors">
                     <CardContent className="p-0">
                       <div className="flex flex-col md:flex-row">
+                        {entry.fichier_media ? (
+                          <div className="md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-border bg-muted/40">
+                            {recueilEntryIsVideo(entry) ? (
+                              <video
+                                src={getAssetUrlWithViewerToken(entry.fichier_media)}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="w-full aspect-video object-cover bg-black max-h-56 md:max-h-72"
+                              />
+                            ) : recueilEntryIsAudio(entry) ? (
+                              <div className="p-4 flex flex-col items-center gap-3 min-h-[140px] justify-center">
+                                <Mic className="h-10 w-10 text-primary/50" />
+                                <audio src={getAssetUrlWithViewerToken(entry.fichier_media)} controls className="w-full max-w-xs" />
+                              </div>
+                            ) : (
+                              <img
+                                src={getAssetUrlWithViewerToken(entry.fichier_media, "width=480&height=320&fit=cover")}
+                                alt=""
+                                className="w-full h-44 md:h-full md:min-h-[200px] object-cover"
+                              />
+                            )}
+                          </div>
+                        ) : null}
                         <div className="flex-1 p-6 space-y-4">
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge variant="secondary" className="text-[10px] uppercase font-bold px-1.5 py-0">
-                                  {entry.type?.libelle || 'Autre'}
+                                  {entry.type?.libelle || "Autre"}
                                 </Badge>
                                 {entry.is_public ? (
                                   <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 border-primary/30 text-primary">
@@ -455,31 +480,37 @@ const Profile = () => {
                                   </Badge>
                                 )}
                               </div>
-                              <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                              <Link
+                                to={`/recueil/${entry.id}`}
+                                className="font-semibold text-lg text-foreground line-clamp-1 hover:text-primary hover:underline"
+                              >
                                 {entry.titre || "Témoignage sans titre"}
-                              </h3>
+                              </Link>
                               <p className="text-xs text-muted-foreground">
                                 Créé le {entry.date_creation ? format(new Date(entry.date_creation), "PPP", { locale: fr }) : "—"}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
                               {getStatusBadge(entry.statut_id)}
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-destructive hover:bg-destructive/10" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:bg-destructive/10"
                                 onClick={() => handleArchiveItem("mmrl_recueil", entry.id)}
                               >
                                 <Trash2 size={16} />
                               </Button>
                             </div>
                           </div>
-                          
+
                           {entry.contenu && (
                             <p className="text-sm text-foreground/80 line-clamp-2 leading-relaxed">
                               {entry.contenu}
                             </p>
                           )}
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/recueil/${entry.id}`}>Voir le détail</Link>
+                          </Button>
                         </div>
                       </div>
                     </CardContent>

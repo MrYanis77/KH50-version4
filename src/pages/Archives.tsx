@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ChevronDown, ArrowRight } from "lucide-react";
-import { useState } from "react";
+import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChronologieHistoriqueList } from "@/components/archives/ChronologieHistoriqueList";
 
 /* ─── data ─── */
 
@@ -11,13 +11,6 @@ const temoignages = [
   { title: "Voix de Battambang", desc: "Témoignage audio recueilli auprès d'une famille de riziculteurs.", type: "podcast" as const, year: 1978 },
   { title: "Les enfants du camp", desc: "Documentaire sur les jeunes survivants des camps de travail.", type: "video" as const, year: 2004 },
   { title: "Mémoire d'une mère", desc: "Lettres retrouvées d'une mère à ses enfants disparus.", type: "text" as const, year: 1976 },
-];
-
-const chronologie = [
-  { year: "1970", title: "Coup d'État de Lon Nol", desc: "Renversement du prince Sihanouk. Le Cambodge entre dans une guerre civile dévastatrice." },
-  { year: "1975", title: "Prise de Phnom Penh par les Khmers rouges", desc: "Le 17 avril 1975, les Khmers rouges entrent dans la capitale et ordonnent l'évacuation totale de la ville." },
-  { year: "1975–1979", title: "Régime des Khmers rouges", desc: "Sous Pol Pot, le régime instaure une dictature agraire responsable de la mort de près de deux millions de personnes." },
-  { year: "1979", title: "Fin du régime", desc: "L'intervention vietnamienne met fin au régime. Le pays entame un long processus de reconstruction." },
 ];
 
 const lieux = [
@@ -86,51 +79,6 @@ const SectionTitle = ({ children, icon, onViewAll }: { children: React.ReactNode
     )}
   </div>
 );
-
-/* ─── timeline item ─── */
-
-const TimelineItem = ({ item, index }: { item: typeof chronologie[0]; index: number }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <motion.div
-      custom={index}
-      variants={fadeUp}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true }}
-      className="relative pl-8 pb-10 last:pb-0 group"
-    >
-      {/* timeline line */}
-      <div className="absolute left-[11px] top-3 bottom-0 w-px bg-border group-last:hidden" />
-      {/* dot */}
-      <div className="absolute left-0 top-2 w-[23px] h-[23px] rounded-full border-2 border-accent bg-background flex items-center justify-center">
-        <div className="w-2 h-2 rounded-full bg-accent" />
-      </div>
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full text-left"
-        aria-expanded={open}
-      >
-        <span className="text-sm font-body font-semibold text-brand-burnt tracking-wide">{item.year}</span>
-        <h3 className="font-display text-lg text-foreground mt-1 flex items-center gap-2">
-          {item.title}
-          <ChevronDown size={16} className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-        </h3>
-      </button>
-      {open && (
-        <motion.p
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="font-body text-sm text-muted-foreground mt-2 leading-relaxed max-w-lg"
-        >
-          {item.desc}
-        </motion.p>
-      )}
-    </motion.div>
-  );
-};
-
-/* ─── page ─── */
 
 const Archives = () => {
   const navigate = useNavigate();
@@ -212,14 +160,10 @@ const Archives = () => {
         {/* 2 · Chronologie historique */}
         <section>
           <SectionTitle icon={<Book size={20} />} onViewAll={() => navigate("/archives/chronologie")}>Chronologie historique</SectionTitle>
-          <p className="font-body text-muted-foreground mb-8 max-w-xl">
-            Les événements clés du génocide cambodgien.
+          <p className="font-body text-muted-foreground mb-8 max-w-2xl">
+            De la colonisation à la mémoire diasporique : périodes clés, génocide, exil et transmission.
           </p>
-          <div className="max-w-xl">
-            {chronologie.map((item, i) => (
-              <TimelineItem key={item.year} item={item} index={i} />
-            ))}
-          </div>
+          <ChronologieHistoriqueList />
         </section>
 
         {/* 3 · Lieux de mémoire */}

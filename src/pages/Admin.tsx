@@ -15,10 +15,10 @@ import { toast } from "sonner";
 import {
   Shield, Plus, Pencil, Trash2, Image as ImageIcon,
   Check, Loader2, GalleryVertical, Puzzle, RefreshCcw,
-  AlertTriangle, Eye, UserCircle, ShieldCheck, Users
+  AlertTriangle, Eye, UserCircle, ShieldCheck, Users, BookOpen,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow, SourceTemoignageRow } from "@/integration/directus-types";
+import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow, SourceTemoignageRow, RecueilRow } from "@/integration/directus-types";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
 import { notifyContributorOnStatutChange } from "@/services/notificationService";
 import { CsvImporter } from "@/components/admin/CsvImporter";
@@ -32,9 +32,9 @@ import { ItemDetailDialog } from "@/components/admin/ItemDetailDialog";
 
 const Admin = () => {
   const {
-    victimes, users, sources, parcours, fragments, qualiteStatuts, typeFragments,
+    victimes, users, sources, parcours, fragments, recueil, qualiteStatuts, typeFragments,
     loading, error, collectionErrors, refreshAction,
-    setVictimes, setUsers, setSources, setParcours, setFragments,
+    setVictimes, setUsers, setSources, setParcours, setFragments, setRecueil,
   } = useAdminData();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -105,7 +105,7 @@ const Admin = () => {
 
   // ── Inline status change ──
   const handleQuickStatus = async (
-    collection: 'mmrl_victimes' | 'directus_users' | 'mmrl_parcours' | 'mmrl_fragments',
+    collection: 'mmrl_victimes' | 'directus_users' | 'mmrl_parcours' | 'mmrl_fragments' | 'mmrl_recueil',
     id: number | string,
     newStatutId: number
   ) => {
@@ -137,6 +137,9 @@ const Admin = () => {
       else if (collection === 'mmrl_fragments') {
         setFragments(prev => prev.map(f => f.id === id ? { ...f, statut_id: newStatutId } : f));
       }
+      else if (collection === 'mmrl_recueil') {
+        setRecueil(prev => prev.map(r => r.id === id ? { ...r, statut_id: newStatutId } : r));
+      }
       
       // Notification au contributeur (validation / rejet)
       if (newStatutId === STATUT_ID.VERIFIE || newStatutId === STATUT_ID.NON_FIABLE) {
@@ -144,6 +147,7 @@ const Admin = () => {
           victimes,
           fragments,
           parcours,
+          recueil,
         });
       }
 
@@ -200,6 +204,7 @@ const Admin = () => {
             victimes,
             fragments: fragments.map((f) => (f.id === editingFragment.id ? saved : f)),
             parcours,
+            recueil,
           });
         }
         toast.success("Fragment mis à jour");
@@ -248,6 +253,7 @@ const Admin = () => {
           victimes,
           fragments,
           parcours,
+          recueil,
         });
       }
       toast.success(`${list.length} fragments validés`);
@@ -294,6 +300,13 @@ const Admin = () => {
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "fragments" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
                   <Puzzle size={18} /> <span>Fragments</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("recueil")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "recueil" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  <BookOpen size={18} /> <span>Recueil</span>
                 </button>
               </nav>
             </div>
@@ -350,6 +363,7 @@ const Admin = () => {
                     setSources={setSources}
                     setParcours={setParcours}
                     setFragments={setFragments}
+                    recueil={recueil}
                     onRefresh={refreshAction}
                     qualiteStatuts={qualiteStatuts}
                     typeFragments={typeFragments}
@@ -419,6 +433,88 @@ const Admin = () => {
                       ))}
                       {fragments.length === 0 && (
                         <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-12">Aucun fragment enregistré.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </TabsContent>
+
+              {/* ─── RECUEIL ─── */}
+              <TabsContent value="recueil" className="mt-0">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold">Recueil de mémoires ({recueil.length})</h2>
+                  <p className="text-sm text-muted-foreground max-w-md text-right">
+                    Les contributions <span className="font-medium">publiques</span> arrivent en « à vérifier » ; validez pour les afficher sur le site.
+                  </p>
+                </div>
+                {collectionErrors.recueil && (
+                  <Alert variant="destructive" className="mb-6">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Erreur de chargement</AlertTitle>
+                    <AlertDescription>{collectionErrors.recueil}</AlertDescription>
+                  </Alert>
+                )}
+                <Card>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Titre / Extrait</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Visibilité</TableHead>
+                        <TableHead>Auteur</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recueil.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="max-w-[220px]">
+                            <div className="font-semibold truncate">{r.titre || "Sans titre"}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {(r.contenu || "").slice(0, 80)}
+                              {(r.contenu || "").length > 80 ? "…" : ""}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs capitalize">{getTypeName(r.type_id)}</TableCell>
+                          <TableCell className="text-xs">{r.is_public ? "Public" : "Privé"}</TableCell>
+                          <TableCell className="text-xs">{getTemoinName(r.auteur_user_id)}</TableCell>
+                          <TableCell>{getStatutBadge(r.statut_id)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Select
+                                value={String(getId(r.statut_id))}
+                                onValueChange={(s) => handleQuickStatus("mmrl_recueil", r.id, Number(s))}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-36">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {qualiteStatuts.map((q) => (
+                                    <SelectItem key={q.id} value={String(q.id)}>
+                                      {q.libelle}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive"
+                                onClick={() => handleDelete("mmrl_recueil", r.id, setRecueil)}
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {recueil.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                            Aucune entrée recueil.
+                          </TableCell>
+                        </TableRow>
                       )}
                     </TableBody>
                   </Table>

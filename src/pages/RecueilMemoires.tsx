@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { directus, directusAuth, getAssetUrl, directusVideoMimeHint } from "@/integration/directus";
+import { directus, directusAuth, getAssetUrlWithViewerToken, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
 import { createItem, uploadFiles, readItems } from "@directus/sdk";
 import { usePublicRecueil } from "@/hooks/useDirectus";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -75,9 +75,6 @@ const getTypeLabel = (code: string | undefined) => {
   const key = code as TypeFragmentCode | undefined;
   return (key && TYPE_LABEL_FALLBACK[key]) || "Autre";
 };
-
-const isVideo = (code?: string) => code === "video";
-const isAudio = (code?: string) => code === "audio";
 
 // ---------------------------------------------------------------------------
 // AddRecueilDialog
@@ -161,6 +158,8 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
         fichierMediaId = Array.isArray(resp) ? resp[0].id : resp.id;
       }
 
+      const statut_id = isPublic ? STATUT_ID.A_VERIFIER : STATUT_ID.VERIFIE;
+
       const payload = {
         auteur_user_id: contributor.id,
         type_id: Number(typeId),
@@ -168,24 +167,26 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
         contenu: contenu.trim() || null,
         fichier_media: fichierMediaId,
         is_public: isPublic,
-        statut_id: STATUT_ID.A_VERIFIER,
+        statut_id,
       };
 
       console.log("[Recueil] Envoi du payload:", payload);
 
       const res = await directusAuth.request(createItem("mmrl_recueil", payload));
       const newId = (res as { id: number }).id;
-      await notifyAdminsOnCreate(
-        "mmrl_recueil",
-        newId,
-        titre.trim() || "Nouvelle entrée au recueil",
-        contributor as any
-      );
+      if (isPublic) {
+        await notifyAdminsOnCreate(
+          "mmrl_recueil",
+          newId,
+          titre.trim() || "Nouvelle entrée au recueil",
+          contributor as any
+        );
+      }
 
       toast.success(
         isPublic
           ? "Votre entrée a été envoyée. Elle sera visible publiquement après validation par l'équipe."
-          : "Votre entrée a été enregistrée."
+          : "Votre entrée a été enregistrée. Vous la retrouvez dans votre profil."
       );
       setOpen(false);
       setTitre("");
@@ -316,35 +317,31 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
 // ---------------------------------------------------------------------------
 // RecueilCard
 // ---------------------------------------------------------------------------
-const RecueilCard = ({ entry }: { entry: RecueilRow }) => {
+const RecueilCard = ({ entry, pendingValidation }: { entry: RecueilRow; pendingValidation?: boolean }) => {
   const typeCode = (entry.type as any)?.code || "";
   const typeLabel = (entry.type as any)?.libelle || getTypeLabel(typeCode);
 
   return (
-    <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col">
+      <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col cursor-pointer">
       {/* Media preview */}
       {entry.fichier_media && (
         <div className="aspect-video w-full overflow-hidden relative bg-black">
-          {isVideo(typeCode) ? (
+          {recueilEntryIsVideo(entry) ? (
             <video
               className="w-full h-full object-cover"
+              src={getAssetUrlWithViewerToken(entry.fichier_media)}
               onMouseOver={e => (e.target as HTMLVideoElement).play()}
               onMouseOut={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
               muted playsInline preload="metadata"
-            >
-              <source
-                src={getAssetUrl(entry.fichier_media)}
-                type={directusVideoMimeHint(entry.fichier_media)}
-              />
-            </video>
-          ) : isAudio(typeCode) ? (
+            />
+          ) : recueilEntryIsAudio(entry) ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 gap-3 p-4">
               <Mic className="h-12 w-12 text-primary/40" />
-              <audio src={getAssetUrl(entry.fichier_media)} controls className="w-full max-w-xs" />
+              <audio src={getAssetUrlWithViewerToken(entry.fichier_media)} controls className="w-full max-w-xs" />
             </div>
           ) : (
             <img
-              src={getAssetUrl(entry.fichier_media, "width=500&height=300&fit=cover")}
+              src={getAssetUrlWithViewerToken(entry.fichier_media, "width=500&height=300&fit=cover")}
               alt={entry.titre || "Média"}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             />
@@ -378,14 +375,27 @@ const RecueilCard = ({ entry }: { entry: RecueilRow }) => {
           </p>
         )}
 
-        <div className="pt-4 mt-auto border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="pt-4 mt-auto border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground gap-2 flex-wrap">
           <span>
             {entry.date_creation
               ? format(new Date(entry.date_creation), "d MMM yyyy", { locale: fr })
               : "—"}
           </span>
-          <span className="flex items-center gap-1">
-            <Globe className="h-3 w-3" /> Public
+          <span className="flex items-center gap-1.5 flex-wrap justify-end">
+            {pendingValidation && (
+              <Badge variant="outline" className="text-amber-800 dark:text-amber-200 border-amber-600/40 text-[10px] font-semibold">
+                En attente de validation
+              </Badge>
+            )}
+            {entry.is_public ? (
+              <span className="flex items-center gap-1">
+                <Globe className="h-3 w-3" /> Public
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Privé
+              </span>
+            )}
           </span>
         </div>
       </CardContent>
@@ -401,8 +411,132 @@ const RecueilMemoires = () => {
   const { entries, loading, refresh } = usePublicRecueil();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  /** Affichage du flux public (validé + en attente pour l’auteur) ou des entrées privées de l’utilisateur. */
+  const [visibilityMode, setVisibilityMode] = useState<"public" | "private">("public");
+  const [myPendingPublic, setMyPendingPublic] = useState<RecueilRow[]>([]);
+  const [myPrivateEntries, setMyPrivateEntries] = useState<RecueilRow[]>([]);
+  const [privateLoading, setPrivateLoading] = useState(false);
+  const [pendingRev, setPendingRev] = useState(0);
 
-  const filtered = entries.filter(e => {
+  const refreshAll = useCallback(() => {
+    refresh();
+    setPendingRev((r) => r + 1);
+  }, [refresh]);
+
+  const recueilListFields = [
+    "*",
+    "type_id.*",
+    "statut_id.*",
+    "fichier_media.id",
+    "fichier_media.filename_download",
+    "fichier_media.type",
+  ] as const;
+
+  useEffect(() => {
+    if (!user) {
+      setMyPendingPublic([]);
+      setMyPrivateEntries([]);
+      setPrivateLoading(false);
+      return;
+    }
+    let cancelled = false;
+    directusAuth
+      .request(
+        readItems("mmrl_recueil", {
+          filter: {
+            _and: [
+              { auteur_user_id: { _eq: user.id } },
+              { is_public: { _eq: true } },
+              { statut_id: { _eq: STATUT_ID.A_VERIFIER } },
+              { deleted_at: { _null: true } },
+            ],
+          },
+          fields: [...recueilListFields],
+          sort: ["-date_creation"],
+          limit: 50,
+        })
+      )
+      .then((rows) => {
+        if (!cancelled) setMyPendingPublic(rows as unknown as RecueilRow[]);
+      })
+      .catch(() => {
+        if (!cancelled) setMyPendingPublic([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, pendingRev]);
+
+  useEffect(() => {
+    if (!user || visibilityMode !== "private") {
+      if (visibilityMode !== "private") setMyPrivateEntries([]);
+      setPrivateLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPrivateLoading(true);
+    directusAuth
+      .request(
+        readItems("mmrl_recueil", {
+          filter: {
+            _and: [
+              { auteur_user_id: { _eq: user.id } },
+              { is_public: { _eq: false } },
+              { deleted_at: { _null: true } },
+            ],
+          },
+          fields: [...recueilListFields],
+          sort: ["-date_creation"],
+          limit: 100,
+        })
+      )
+      .then((rows) => {
+        if (!cancelled) setMyPrivateEntries(rows as unknown as RecueilRow[]);
+      })
+      .catch(() => {
+        if (!cancelled) setMyPrivateEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPrivateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, visibilityMode, pendingRev]);
+
+  const displayEntries = useMemo(() => {
+    if (visibilityMode === "private" && user) {
+      return myPrivateEntries.map((entry) => ({
+        entry,
+        pendingValidation: false as const,
+      }));
+    }
+
+    const map = new Map<number, { entry: RecueilRow; pendingValidation: boolean }>();
+    for (const e of entries) {
+      map.set(e.id, { entry: e, pendingValidation: false });
+    }
+    for (const p of myPendingPublic) {
+      if (!map.has(p.id)) {
+        map.set(p.id, { entry: p, pendingValidation: true });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      const da = a.entry.date_creation ? new Date(a.entry.date_creation).getTime() : 0;
+      const db = b.entry.date_creation ? new Date(b.entry.date_creation).getTime() : 0;
+      return db - da;
+    });
+  }, [visibilityMode, user, myPrivateEntries, entries, myPendingPublic]);
+
+  useEffect(() => {
+    if (!user && visibilityMode === "private") {
+      setVisibilityMode("public");
+    }
+  }, [user, visibilityMode]);
+
+  const listLoading = visibilityMode === "private" ? privateLoading : loading;
+
+  const filtered = displayEntries.filter(({ entry: e }) => {
     const code = (e.type as any)?.code || "";
     const matchSearch =
       (e.titre?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
@@ -430,7 +564,7 @@ const RecueilMemoires = () => {
             </p>
             <div className="flex flex-wrap gap-4">
               {user ? (
-                <AddRecueilDialog contributor={user} onSuccess={refresh} />
+                <AddRecueilDialog contributor={user} onSuccess={refreshAll} />
               ) : (
                 <a href="/auth">
                   <Button className="rounded-full px-8 h-12 gap-2">
@@ -449,8 +583,47 @@ const RecueilMemoires = () => {
       {/* Content */}
       <main id="explore" className="container px-6 py-16 mx-auto">
 
+        <div className="flex flex-col gap-6 mb-12">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4">
+            <div className="inline-flex rounded-full border border-border bg-muted/40 p-1 w-fit">
+              <Button
+                type="button"
+                size="sm"
+                variant={visibilityMode === "public" ? "default" : "ghost"}
+                className="rounded-full gap-1.5"
+                onClick={() => setVisibilityMode("public")}
+              >
+                <Globe className="h-4 w-4" />
+                Public
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={visibilityMode === "private" ? "default" : "ghost"}
+                className="rounded-full gap-1.5"
+                disabled={!user}
+                title={!user ? "Connectez-vous pour voir vos entrées privées" : undefined}
+                onClick={() => user && setVisibilityMode("private")}
+              >
+                <Lock className="h-4 w-4" />
+                Mes entrées privées
+              </Button>
+            </div>
+            {user && visibilityMode === "private" && (
+              <p className="text-sm text-muted-foreground max-w-xl">
+                Seules vos contributions marquées comme <span className="font-medium text-foreground">privées</span> apparaissent ici. Elles ne sont pas publiées sur le recueil public.
+              </p>
+            )}
+            {!user && (
+              <p className="text-sm text-muted-foreground">
+                <a href="/auth" className="text-primary underline-offset-4 hover:underline">Connectez-vous</a>
+                {" "}pour afficher vos entrées privées.
+              </p>
+            )}
+          </div>
+
         {/* Filters bar */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -472,22 +645,28 @@ const RecueilMemoires = () => {
             </TabsList>
           </Tabs>
         </div>
+        </div>
 
         {/* Grid */}
-        {loading ? (
+        {listLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-64 rounded-2xl bg-muted animate-pulse" />)}
           </div>
         ) : filtered.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filtered.map((entry, idx) => (
+            {filtered.map(({ entry, pendingValidation }, idx) => (
               <motion.div
                 key={entry.id}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.05 }}
               >
-                <RecueilCard entry={entry} />
+                <Link
+                  to={`/recueil/${entry.id}`}
+                  className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <RecueilCard entry={entry} pendingValidation={pendingValidation} />
+                </Link>
               </motion.div>
             ))}
           </div>
@@ -496,9 +675,18 @@ const RecueilMemoires = () => {
             <BookOpen className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
             <h3 className="text-xl font-bold mb-2">Aucune entrée trouvée</h3>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Soyez le premier à contribuer à ce recueil ou ajustez vos filtres.
+              {visibilityMode === "private"
+                ? "Vous n’avez pas encore d’entrée privée dans le recueil, ou adaptez les filtres par type."
+                : "Soyez le premier à contribuer à ce recueil ou ajustez vos filtres."}
             </p>
-            <Button variant="outline" onClick={() => { setSearchTerm(""); setActiveTab("all"); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm("");
+                setActiveTab("all");
+                setVisibilityMode("public");
+              }}
+            >
               Réinitialiser les filtres
             </Button>
           </div>
@@ -530,7 +718,7 @@ const RecueilMemoires = () => {
                 })}
               </div>
               {user ? (
-                <AddRecueilDialog contributor={user} onSuccess={refresh} />
+                <AddRecueilDialog contributor={user} onSuccess={refreshAll} />
               ) : (
                 <a href="/auth">
                   <Button className="w-full md:w-auto px-10 h-12 rounded-full">Déposer un témoignage</Button>
