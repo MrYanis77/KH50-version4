@@ -68,10 +68,10 @@ export const CsvImporter = ({ onImportComplete }: CsvImporterProps) => {
           let value = rowData[key];
           
           // Auto-map relational IDs if they reference a relative index (1, 2, 3...)
-          if (key === 'auteur_temoin_id' && createdIdsMap['mmrl_temoins']) {
+          if (key === 'auteur_user_id' && createdIdsMap['directus_users']) {
              const index = parseInt(value) - 1;
-             if (!isNaN(index) && createdIdsMap['mmrl_temoins'][index]) {
-                 value = createdIdsMap['mmrl_temoins'][index];
+             if (!isNaN(index) && createdIdsMap['directus_users'][index]) {
+                 value = createdIdsMap['directus_users'][index];
              }
           }
           if (key === 'source_id' && createdIdsMap['mmrl_sources_temoignage']) {

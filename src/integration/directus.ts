@@ -55,8 +55,46 @@ export const directusAuth = createDirectus<DirectusSchema>(DIRECTUS_URL)
   .with(rest());
 
 // ── Helper pour les assets ────────────────────────────────────────────────────
-export const getAssetUrl = (fileId: string | null | undefined, params: string = "") => {
-  if (!fileId) return "";
+const DIRECTUS_BASE = DIRECTUS_URL.replace(/\/+$/, "");
+
+function resolveDirectusFileRef(fileRef: unknown): {
+  id: string;
+  filenameDownload?: string;
+} {
+  if (!fileRef) return { id: "" };
+  if (typeof fileRef === "string") return { id: fileRef };
+  if (typeof fileRef !== "object") return { id: "" };
+  const o = fileRef as Record<string, unknown>;
+  const rawId = o.id ?? o.file;
+  const id = typeof rawId === "string" ? rawId : "";
+  const fn = o.filename_download;
+  const filenameDownload = typeof fn === "string" && fn.length > 0 ? fn : undefined;
+  return { id, filenameDownload };
+}
+
+/**
+ * URL d'origine Directus. Si le fichier est un objet (expand API), ajoute
+ * `/<filename_download>` pour le bon Content-Type et une meilleure lecture par `<video>`.
+ */
+export const getAssetUrl = (fileRef: unknown, params: string = "") => {
+  const { id, filenameDownload } = resolveDirectusFileRef(fileRef);
+  if (!id) return "";
+  const nameSeg = filenameDownload
+    ? `/${filenameDownload.split("/").map(encodeURIComponent).join("/")}`
+    : "";
   const queryString = params ? `&${params}` : "";
-  return `${DIRECTUS_URL}/assets/${fileId}?access_token=${ADMIN_TOKEN}${queryString}`;
+  return `${DIRECTUS_BASE}/assets/${id}${nameSeg}?access_token=${encodeURIComponent(ADMIN_TOKEN)}${queryString}`;
 };
+
+/** MIME enregistré dans Directus quand `fichier_media` est expand (ex. video/mp4). */
+export function getDirectusFileMime(fileRef: unknown): string | undefined {
+  if (!fileRef || typeof fileRef !== "object") return undefined;
+  const t = (fileRef as Record<string, unknown>).type;
+  return typeof t === "string" ? t : undefined;
+}
+
+/** MIME pour `<source type="…">` des vidéos (fallback `video/mp4`). */
+export function directusVideoMimeHint(fileRef: unknown): string {
+  const m = getDirectusFileMime(fileRef);
+  return m?.startsWith("video/") ? m : "video/mp4";
+}

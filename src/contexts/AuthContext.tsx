@@ -1,14 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { directus, directusAuth } from "@/integration/directus";
 import { readMe, createUser, createItem, readItems } from "@directus/sdk";
-import type { TemoinRow } from "@/integration/directus-types";
-import { STATUT_ID } from "@/integration/directus-types";
-
-// ---------------------------------------------------------------------------
-// Constantes de rôles Directus (directus_roles.id)
-// ---------------------------------------------------------------------------
-const ROLE_UTILISATEURS = "773081d2-4ca0-4d9c-a149-9b7bb49b7de3";
-const ROLE_ADMINISTRATOR = "af76e557-fb34-4a8b-9900-a6b60121662c";
+// IDs des rôles Directus (directus_roles) — exportés pour l'admin (filtres utilisateurs / admins)
+export const ROLE_UTILISATEURS = "773081d2-4ca0-4d9c-a149-9b7bb49b7de3";
+export const ROLE_ADMINISTRATOR = "af76e557-fb34-4a8b-9900-a6b60121662c";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,8 +21,7 @@ interface AuthContextType {
   session: any | null;
   loading: boolean;
   isAdmin: boolean;
-  temoin: TemoinRow | null;
-  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName?: string, phone?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ role: string }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -36,51 +30,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Cherche ou crée la ligne mmrl_temoins liée à un utilisateur Directus */
-async function ensureTemoin(directusUserId: string, prenom: string, nom: string): Promise<TemoinRow | null> {
-  try {
-    // Recherche d'un témoin existant pour cet utilisateur
-    const existing = await directus.request(
-      readItems("mmrl_temoins", {
-        filter: {
-          directus_user_id: { _eq: directusUserId },
-          deleted_at: { _null: true },
-        },
-        limit: 1,
-      })
-    );
-
-    if (existing && (existing as unknown as TemoinRow[]).length > 0) {
-      return (existing as unknown as TemoinRow[])[0];
-    }
-
-    // Création d'un nouveau témoin — statut_id doit être un nombre (INT), pas une string
-    const created = await directus.request(
-      createItem("mmrl_temoins", {
-        directus_user_id: directusUserId,
-        prenom: prenom || "Inconnu",
-        nom: nom || "Inconnu",
-        statut_id: STATUT_ID.A_VERIFIER, // number: 2
-      } as any)
-    );
-
-    return created as unknown as TemoinRow;
-  } catch (e) {
-    console.error("[auth] Impossible de créer/trouver le témoin:", e);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [session, setSession] = useState<any | null>(null);
-  const [temoin, setTemoin] = useState<TemoinRow | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hydrate l'état utilisateur depuis un token stocké au montage
@@ -104,19 +58,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setUser(userData);
         setSession(me);
-
-        // Restaure aussi le témoin associé
-        const t = await ensureTemoin(
-          userData.id,
-          userData.first_name ?? "",
-          userData.last_name ?? ""
-        );
-        setTemoin(t);
       } catch {
         // Token absent ou expiré — pas une erreur à afficher
         setUser(null);
         setSession(null);
-        setTemoin(null);
       } finally {
         setLoading(false);
       }
@@ -126,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   // ── signUp ──────────────────────────────────────────────────────────────────
-  const signUp = async (email: string, password: string, displayName?: string): Promise<void> => {
+  const signUp = async (email: string, password: string, displayName?: string, phone?: string): Promise<void> => {
     const parts = (displayName ?? "").trim().split(/\s+/);
     const first_name = parts[0] ?? "";
     const last_name = parts.slice(1).join(" ");
@@ -139,6 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         password,
         first_name: first_name || undefined,
         last_name: last_name || undefined,
+        ...(phone ? { telephone: phone } : {}),
         // ⚠️ role doit être l'UUID de la string, pas l'objet
         role: ROLE_UTILISATEURS,
         status: "active",
@@ -176,14 +122,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(userData);
     setSession(me);
 
-    // Crée ou retrouve le témoin associé à cet utilisateur
-    const t = await ensureTemoin(
-      userData.id,
-      userData.first_name ?? "",
-      userData.last_name ?? ""
-    );
-    setTemoin(t);
-
     return { role: userData.role ?? "" };
   };
 
@@ -196,7 +134,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setUser(null);
       setSession(null);
-      setTemoin(null);
     }
   };
 
@@ -226,7 +163,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         loading,
         isAdmin,
-        temoin,
         signUp,
         signIn,
         signOut,

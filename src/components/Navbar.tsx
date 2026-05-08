@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import ThemeToggle from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const navLinks = [
   { label: "Recueil", href: "/recueil", end: false },
@@ -76,7 +77,7 @@ const Navbar = () => {
             </Link>
           )}
 
-          {user && (
+          {user && !isAdmin && (
             <Link
               to="/profile"
               className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
@@ -85,6 +86,8 @@ const Navbar = () => {
               Profil
             </Link>
           )}
+
+          {user && <NotificationBell />}
 
           <ThemeToggle />
 
@@ -121,7 +124,7 @@ const Navbar = () => {
               </NavLink>
             ))}
 
-            {user && (
+            {user && !isAdmin && (
               <NavLink
                 to="/profile"
                 onClick={() => setMobileOpen(false)}

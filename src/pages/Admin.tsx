@@ -15,11 +15,12 @@ import { toast } from "sonner";
 import {
   Shield, Plus, Pencil, Trash2, Image as ImageIcon,
   Check, Loader2, GalleryVertical, Puzzle, RefreshCcw,
-  AlertTriangle, Eye, Settings2, Users
+  AlertTriangle, Eye, UserCircle, ShieldCheck, Users
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { VictimeRow, TemoinRow, ParcoursRow, FragmentRow, SourceTemoignageRow } from "@/integration/directus-types";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { notifyContributorOnStatutChange } from "@/services/notificationService";
 import { CsvImporter } from "@/components/admin/CsvImporter";
 import { MultiInsertDialog } from "@/components/admin/MultiInsertDialog";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
@@ -31,9 +32,9 @@ import { ItemDetailDialog } from "@/components/admin/ItemDetailDialog";
 
 const Admin = () => {
   const {
-    victimes, temoins, sources, parcours, fragments, qualiteStatuts, typeFragments,
+    victimes, users, sources, parcours, fragments, qualiteStatuts, typeFragments,
     loading, error, collectionErrors, refreshAction,
-    setVictimes, setTemoins, setSources, setParcours, setFragments,
+    setVictimes, setUsers, setSources, setParcours, setFragments,
   } = useAdminData();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +46,6 @@ const Admin = () => {
   const handleOpenItem = (type: string, id: number) => {
     let collection: any[] = [];
     if (type === 'victime') collection = victimes;
-    else if (type === 'temoin') collection = temoins;
     else if (type === 'fragment') collection = fragments;
     else if (type === 'parcours') collection = parcours;
     else if (type === 'source') collection = sources;
@@ -73,9 +73,7 @@ const Admin = () => {
   };
 
   const getTemoinName = (id: any) => {
-    const tid = getId(id);
-    const t = temoins.find(t => t.id === tid);
-    return t ? `${t.prenom} ${t.nom}` : `Témoin #${tid}`;
+    return `User #${id}`;
   };
 
   const getSourceName = (id?: any) => {
@@ -107,8 +105,8 @@ const Admin = () => {
 
   // ── Inline status change ──
   const handleQuickStatus = async (
-    collection: 'mmrl_victimes' | 'mmrl_temoins' | 'mmrl_parcours' | 'mmrl_fragments',
-    id: number,
+    collection: 'mmrl_victimes' | 'directus_users' | 'mmrl_parcours' | 'mmrl_fragments',
+    id: number | string,
     newStatutId: number
   ) => {
     console.log(`Updating ${collection}#${id} status to ${newStatutId}`);
@@ -119,20 +117,19 @@ const Admin = () => {
       // 2. Propagation
       if (collection === 'mmrl_victimes') {
         const v = victimes.find(x => x.id === id);
-        const temoinId = v ? getId(v.auteur_temoin_id) : 0;
-        if (temoinId) {
-          await directus.request(updateItem('mmrl_temoins', temoinId, { statut_id: newStatutId }));
-          setTemoins(prev => prev.map(t => t.id === temoinId ? { ...t, statut_id: newStatutId } : t));
+        const userId = v ? v.auteur_user_id : null;
+        if (userId) {
+          // directus_users n'a pas de statut_id mais un champ 'status' ? Non, directus_users standard a 'status' ou on le gère autrement. 
+          // Par prudence, on ne propage pas le statut_id vers directus_users car ce n'est pas la même logique.
         }
         setVictimes(prev => prev.map(v => v.id === id ? { ...v, statut_id: newStatutId } : v));
       } 
-      else if (collection === 'mmrl_temoins') {
-        const linkedVictimes = victimes.filter(v => getId(v.auteur_temoin_id) === id);
+      else if (collection === 'directus_users') {
+        const linkedVictimes = victimes.filter(v => v.auteur_user_id === String(id));
         for (const v of linkedVictimes) {
           await directus.request(updateItem('mmrl_victimes', v.id, { statut_id: newStatutId }));
         }
-        setVictimes(prev => prev.map(v => getId(v.auteur_temoin_id) === id ? { ...v, statut_id: newStatutId } : v));
-        setTemoins(prev => prev.map(t => t.id === id ? { ...t, statut_id: newStatutId } : t));
+        setVictimes(prev => prev.map(v => v.auteur_user_id === String(id) ? { ...v, statut_id: newStatutId } : v));
       }
       else if (collection === 'mmrl_parcours') {
         setParcours(prev => prev.map(p => p.id === id ? { ...p, statut_id: newStatutId } : p));
@@ -141,6 +138,15 @@ const Admin = () => {
         setFragments(prev => prev.map(f => f.id === id ? { ...f, statut_id: newStatutId } : f));
       }
       
+      // Notification au contributeur (validation / rejet)
+      if (newStatutId === STATUT_ID.VERIFIE || newStatutId === STATUT_ID.NON_FIABLE) {
+        await notifyContributorOnStatutChange(collection, Number(id), newStatutId, {
+          victimes,
+          fragments,
+          parcours,
+        });
+      }
+
       toast.success("Statut mis à jour et propagé avec succès");
     } catch (err: any) { 
       console.error("Update failed:", err);
@@ -165,7 +171,7 @@ const Admin = () => {
     e.preventDefault();
     if (!editingFragment) return;
 
-    if (!editingFragment.victime_id || !editingFragment.auteur_temoin_id || !editingFragment.description) {
+    if (!editingFragment.victime_id || !editingFragment.auteur_user_id || !editingFragment.description) {
       toast.error("Veuillez remplir la victime, l'auteur (témoin) et la description.");
       return;
     }
@@ -179,8 +185,23 @@ const Admin = () => {
       };
 
       if (editingFragment.id) {
+        const prevStatut = getId(
+          editingFragment.statut_id ?? fragments.find((f) => f.id === editingFragment.id)?.statut_id
+        );
         const result = await directus.request(updateItem("mmrl_fragments" as any, editingFragment.id, dataToSave));
-        setFragments(prev => prev.map(f => f.id === editingFragment.id ? (result as unknown as FragmentRow) : f));
+        const saved = result as unknown as FragmentRow;
+        setFragments(prev => prev.map(f => f.id === editingFragment.id ? saved : f));
+        const nextStatut = getId(saved.statut_id);
+        if (
+          prevStatut !== nextStatut &&
+          (nextStatut === STATUT_ID.VERIFIE || nextStatut === STATUT_ID.NON_FIABLE)
+        ) {
+          await notifyContributorOnStatutChange("mmrl_fragments", editingFragment.id, nextStatut, {
+            victimes,
+            fragments: fragments.map((f) => (f.id === editingFragment.id ? saved : f)),
+            parcours,
+          });
+        }
         toast.success("Fragment mis à jour");
       } else {
         const result = await directus.request(createItem("mmrl_fragments" as any, dataToSave as any));
@@ -222,6 +243,13 @@ const Admin = () => {
         const u = updated.find(u => u.id === f.id);
         return u ? u : f;
       }));
+      for (const item of list) {
+        await notifyContributorOnStatutChange("mmrl_fragments", item.id, STATUT_ID.VERIFIE, {
+          victimes,
+          fragments,
+          parcours,
+        });
+      }
       toast.success(`${list.length} fragments validés`);
     } catch (err: any) {
       toast.error("Erreur lors de la validation: " + err.message);
@@ -238,7 +266,7 @@ const Admin = () => {
             <h1 className="text-3xl font-display text-foreground">Explorateur de Données</h1>
           </div>
           <div className="flex gap-2">
-            <MultiInsertDialog onComplete={refreshAction} temoins={temoins} sources={sources} victimes={victimes} />
+            <MultiInsertDialog onComplete={refreshAction} sources={sources} victimes={victimes} typeFragments={typeFragments} />
             <CsvImporter onImportComplete={refreshAction} />
             <Button variant="outline" size="sm" onClick={refreshAction} disabled={loading} className="gap-2">
               <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -251,15 +279,17 @@ const Admin = () => {
           {/* Sidebar */}
           <aside className="w-full md:w-64 space-y-8">
             <div className="space-y-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion Données</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion données</p>
               <nav className="flex flex-col gap-1">
-                <button 
+                <button
+                  type="button"
                   onClick={() => setActiveTab("dossiers")}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "dossiers" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
                   <Users size={18} /> <span>Contributeurs</span>
                 </button>
-                <button 
+                <button
+                  type="button"
                   onClick={() => setActiveTab("fragments")}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "fragments" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
@@ -269,25 +299,34 @@ const Admin = () => {
             </div>
 
             <div className="space-y-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion Système</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Gestion utilisateurs</p>
               <nav className="flex flex-col gap-1">
-                <button 
-                  onClick={() => setActiveTab("lookups")}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "lookups" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("user-admins")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "user-admins" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
-                  <Settings2 size={18} /> <span>Configuration</span>
+                  <Shield size={18} /> <span>Administrateurs</span>
                 </button>
-                <button 
-                  onClick={() => setActiveTab("users")}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "users" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("user-members")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "user-members" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
-                  <Shield size={18} /> <span>Comptes Membres</span>
+                  <UserCircle size={18} /> <span>Utilisateurs</span>
                 </button>
-                <button 
-                  onClick={() => setActiveTab("archives")}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-orange-600 ${activeTab === "archives" ? "bg-orange-100 dark:bg-orange-900/30 font-medium" : "hover:bg-muted"}`}
+              </nav>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-2">Administration</p>
+              <nav className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("administration")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeTab === "administration" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                 >
-                  <Trash2 size={18} /> <span>Archives & Corbeille</span>
+                  <ShieldCheck size={18} /> <span>Paramètres &amp; archives</span>
                 </button>
               </nav>
             </div>
@@ -302,12 +341,12 @@ const Admin = () => {
               <TabsContent value="dossiers" className="mt-0">
                   <DossiersPanel
                     victimes={victimes}
-                    temoins={temoins}
+                    users={users}
                     sources={sources}
                     parcours={parcours}
                     fragments={fragments}
                     setVictimes={setVictimes}
-                    setTemoins={setTemoins}
+                    setUsers={setUsers}
                     setSources={setSources}
                     setParcours={setParcours}
                     setFragments={setFragments}
@@ -357,7 +396,7 @@ const Admin = () => {
                           <TableCell className="capitalize text-xs">{getTypeName(f.type_id)}</TableCell>
                           <TableCell className="text-sm font-medium">{getVictimeName(f.victime_id)}</TableCell>
                           <TableCell className="text-xs">
-                            {getTemoinName(f.auteur_temoin_id)}
+                            {getTemoinName(f.auteur_user_id)}
                             {f.source_id && <div className="text-[10px] text-muted-foreground">Source: {getSourceName(f.source_id)}</div>}
                           </TableCell>
                           <TableCell>{getStatutBadge(f.statut_id)}</TableCell>
@@ -387,22 +426,44 @@ const Admin = () => {
               </TabsContent>
 
               {/* ─── CONFIGURATION ─── */}
-              <TabsContent value="lookups" className="mt-0">
+              <TabsContent value="user-admins" className="mt-0">
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold tracking-tight">Gestion des administrateurs</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Comptes avec le rôle administrateur (accès complet Directus / back-office).
+                  </p>
+                </div>
+                <UsersPanel mode="administrators" />
+              </TabsContent>
+
+              <TabsContent value="user-members" className="mt-0">
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold tracking-tight">Gestion des utilisateurs</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Contributeurs et autres comptes (hors rôle administrateur).
+                  </p>
+                </div>
+                <UsersPanel mode="members" />
+              </TabsContent>
+
+              <TabsContent value="administration" className="mt-0 space-y-10">
+                <div className="mb-2">
+                  <h2 className="text-xl font-bold tracking-tight">Administration</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Référentiels (statuts, types de fragments) et archives globales de la plateforme.
+                  </p>
+                </div>
                 <LookupsPanel 
                   qualiteStatuts={qualiteStatuts}
                   typeFragments={typeFragments}
                   onRefresh={refreshAction}
                 />
-              </TabsContent>
-
-              {/* ─── UTILISATEURS ─── */}
-              <TabsContent value="users" className="mt-0">
-                <UsersPanel />
-              </TabsContent>
-
-              {/* ─── ARCHIVES ─── */}
-              <TabsContent value="archives" className="mt-0">
-                <ArchivePanel />
+                <div className="rounded-xl border border-orange-200/60 dark:border-orange-900/40 bg-orange-50/30 dark:bg-orange-950/20 p-4">
+                  <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-200 mb-3 flex items-center gap-2">
+                    <Trash2 className="h-4 w-4" /> Archives &amp; corbeille
+                  </h3>
+                  <ArchivePanel />
+                </div>
               </TabsContent>
             </Tabs>
           </main>
@@ -425,13 +486,8 @@ const Admin = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Auteur (Témoin)</Label>
-                <Select value={String(editingFragment?.auteur_temoin_id || "")} onValueChange={v => setEditingFragment(p => ({ ...p!, auteur_temoin_id: Number(v) }))}>
-                  <SelectTrigger><SelectValue placeholder="Choisir un témoin" /></SelectTrigger>
-                  <SelectContent>
-                    {temoins.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.prenom} {t.nom}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>Auteur (User ID)</Label>
+                <Input value={String(editingFragment?.auteur_user_id || "")} onChange={e => setEditingFragment(p => ({ ...p!, auteur_user_id: e.target.value }))} placeholder="UUID de l'utilisateur" />
               </div>
               <div className="space-y-2">
                 <Label>Type</Label>

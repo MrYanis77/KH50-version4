@@ -15,18 +15,16 @@ export const ArchivePanel = () => {
   const fetchArchives = async () => {
     setLoading(true);
     try {
-      const [victimes, fragments, parcours, temoins] = await Promise.all([
+      const [victimes, fragments, parcours] = await Promise.all([
         directus.request(readItems("mmrl_victimes", { filter: { deleted_at: { _nnull: true } }, fields: ["*.*"] })).catch(() => []),
         directus.request(readItems("mmrl_fragments", { filter: { deleted_at: { _nnull: true } }, fields: ["*.*"] })).catch(() => []),
-        directus.request(readItems("mmrl_parcours", { filter: { deleted_at: { _nnull: true } }, fields: ["*.*"] })).catch(() => []),
-        directus.request(readItems("mmrl_temoins", { filter: { deleted_at: { _nnull: true } }, fields: ["*.*"] })).catch(() => [])
+        directus.request(readItems("mmrl_parcours", { filter: { deleted_at: { _nnull: true } }, fields: ["*.*"] })).catch(() => [])
       ]);
 
       const allArchives = [
         ...victimes.map((v: any) => ({ ...v, _type: 'Victime', _collection: 'mmrl_victimes', _title: `${v.prenom} ${v.nom}` })),
         ...fragments.map((f: any) => ({ ...f, _type: 'Fragment', _collection: 'mmrl_fragments', _title: f.titre || f.description?.substring(0,50) })),
-        ...parcours.map((p: any) => ({ ...p, _type: 'Parcours', _collection: 'mmrl_parcours', _title: p.titre || p.description?.substring(0,50) })),
-        ...temoins.map((t: any) => ({ ...t, _type: 'Témoin', _collection: 'mmrl_temoins', _title: `${t.prenom} ${t.nom}` }))
+        ...parcours.map((p: any) => ({ ...p, _type: 'Parcours', _collection: 'mmrl_parcours', _title: p.titre || p.description?.substring(0,50) }))
       ].sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime());
 
       setArchives(allArchives);

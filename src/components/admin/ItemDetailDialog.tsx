@@ -10,6 +10,7 @@ import {
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { getAssetUrl, directusVideoMimeHint } from "@/integration/directus";
 
 interface ItemDetailDialogProps {
   isOpen: boolean;
@@ -18,13 +19,11 @@ interface ItemDetailDialogProps {
   data: any;
   qualiteStatuts?: any[];
   victimes?: any[];
-  temoins?: any[];
+  users?: any[];
   sources?: any[];
 }
 
-const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL as string;
-
-export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, victimes, temoins, sources }: ItemDetailDialogProps) {
+export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, victimes, users, sources }: ItemDetailDialogProps) {
   if (!data) return null;
 
   const getStatusBadge = (statut_id: number) => {
@@ -58,7 +57,7 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
         <div className="w-32 h-32 rounded-xl bg-muted overflow-hidden border border-border flex items-center justify-center shrink-0 shadow-inner">
           {v.photo_principale ? (
             <img 
-              src={`${DIRECTUS_URL}/assets/${v.photo_principale}`} 
+              src={getAssetUrl(v.photo_principale)} 
               alt={v.nom} 
               className="w-full h-full object-cover"
             />
@@ -182,25 +181,29 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
         <div className="rounded-xl overflow-hidden border border-border bg-black/5 flex flex-col items-center justify-center min-h-[200px] relative group">
           {f.type_id === TYPE_FRAGMENT_ID.PHOTOGRAPHIE ? (
             <img 
-              src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
+              src={getAssetUrl(f.fichier_media)} 
               alt={f.titre || "Photographie"} 
               className="max-w-full max-h-[500px] object-contain shadow-lg"
             />
           ) : (f.type_id === TYPE_FRAGMENT_ID.VIDEO || f.type?.code === 'video') ? (
             <video 
-              src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
               controls 
               preload="metadata"
               playsInline
               className="max-w-full max-h-[500px] bg-black"
-            />
+            >
+              <source
+                src={getAssetUrl(f.fichier_media)}
+                type={directusVideoMimeHint(f.fichier_media)}
+              />
+            </video>
           ) : (f.type_id === TYPE_FRAGMENT_ID.AUDIO || f.type?.code === 'audio') ? (
             <div className="flex flex-col items-center gap-4 p-8 w-full">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                 <Mic size={32} />
               </div>
               <audio 
-                src={`${DIRECTUS_URL}/assets/${f.fichier_media}`} 
+                src={getAssetUrl(f.fichier_media)} 
                 controls 
                 preload="metadata"
                 className="w-full max-w-md"
@@ -216,12 +219,12 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
                 <p className="text-xs text-muted-foreground">Consulter le document original</p>
               </div>
               <Button variant="outline" size="sm" asChild className="mt-2">
-                <a href={`${DIRECTUS_URL}/assets/${f.fichier_media}`} target="_blank" rel="noreferrer">
+                <a href={getAssetUrl(f.fichier_media)} target="_blank" rel="noreferrer">
                   <ExternalLink size={14} className="mr-2" /> Ouvrir le document
                 </a>
               </Button>
               <iframe 
-                src={`${DIRECTUS_URL}/assets/${f.fichier_media}#toolbar=0&navpanes=0&scrollbar=0`} 
+                src={`${getAssetUrl(f.fichier_media)}#toolbar=0&navpanes=0&scrollbar=0`} 
                 className="w-full h-[400px] mt-4 rounded-lg border border-border hidden sm:block"
                 title="Document Preview"
               />
@@ -230,7 +233,7 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
             <div className="flex flex-col items-center gap-2 p-8">
               <FileText className="h-12 w-12 text-muted-foreground" />
               <Button variant="outline" size="sm" asChild>
-                <a href={`${DIRECTUS_URL}/assets/${f.fichier_media}`} target="_blank" rel="noreferrer">
+                <a href={getAssetUrl(f.fichier_media)} target="_blank" rel="noreferrer">
                   <ExternalLink size={14} className="mr-2" /> Voir le fichier
                 </a>
               </Button>
@@ -277,9 +280,9 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">Auteur :</span>
               <span className="font-medium truncate">
-                {temoins?.find(t => t.id === f.auteur_temoin_id)
-                  ? `${temoins.find(t => t.id === f.auteur_temoin_id).prenom} ${temoins.find(t => t.id === f.auteur_temoin_id).nom}`
-                  : `ID #${f.auteur_temoin_id}`}
+                {users?.find(t => t.id === f.auteur_user_id)
+                  ? `${users.find(t => t.id === f.auteur_user_id).prenom} ${users.find(t => t.id === f.auteur_user_id).nom}`
+                  : `ID #${f.auteur_user_id}`}
               </span>
             </div>
           </div>
@@ -310,9 +313,9 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
           </div>
           <div className="flex items-center gap-1">
             <span className="font-semibold">Auteur :</span>
-            {temoins?.find(t => t.id === data.auteur_temoin_id)
-              ? `${temoins.find(t => t.id === data.auteur_temoin_id).prenom} ${temoins.find(t => t.id === data.auteur_temoin_id).nom}`
-              : `ID #${data.auteur_temoin_id}`}
+            {users?.find(t => t.id === data.auteur_user_id)
+              ? `${users.find(t => t.id === data.auteur_user_id).prenom} ${users.find(t => t.id === data.auteur_user_id).nom}`
+              : `ID #${data.auteur_user_id}`}
           </div>
         </div>
         <div className="space-y-1 text-right">
@@ -382,7 +385,7 @@ export function ItemDetailDialog({ isOpen, onClose, type, data, qualiteStatuts, 
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">Document joint</h3>
           <div className="rounded-xl overflow-hidden border border-border bg-black/5 flex items-center justify-center min-h-[150px]">
              <img 
-               src={`${DIRECTUS_URL}/assets/${p.fichier_media}`} 
+               src={getAssetUrl(p.fichier_media)} 
                alt="Preuve parcours" 
                className="max-w-full max-h-[300px] object-contain"
              />

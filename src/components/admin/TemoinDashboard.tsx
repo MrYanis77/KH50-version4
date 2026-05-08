@@ -6,10 +6,14 @@ import { User, Users, Puzzle, History, Eye, ChevronDown, ChevronRight, CalendarD
 import { Button } from "@/components/ui/button";
 import type { TemoinRow, VictimeRow, FragmentRow, ParcoursRow } from "@/integration/directus-types";
 import { ItemDetailDialog } from "./ItemDetailDialog";
-import { StatutSelect } from "./DossiersPanel";
+import { StatutSelect } from "./StatutSelect";
+import { directus } from "@/integration/directus";
+import { updateUser } from "@directus/sdk";
+import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Props {
-  temoin: TemoinRow;
+  user: any;
   victimes: VictimeRow[];
   fragments: FragmentRow[];
   parcours: ParcoursRow[];
@@ -25,7 +29,7 @@ const getId = (val: any): number => {
   return Number(val);
 };
 
-export function TemoinDashboard({ temoin, victimes, fragments, parcours, qualiteStatuts, onBack, onStatusChange, onDelete }: Props) {
+export function TemoinDashboard({ user, victimes, fragments, parcours, qualiteStatuts, onBack, onStatusChange, onDelete }: Props) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailType, setDetailType] = useState<'victime' | 'fragment' | 'parcours'>('victime');
   const [detailData, setDetailData] = useState<any>(null);
@@ -50,7 +54,13 @@ export function TemoinDashboard({ temoin, victimes, fragments, parcours, qualite
     );
   };
 
-  const myVictimes = victimes.filter(v => getId(v.auteur_temoin_id) === temoin.id);
+  const getStrId = (val: any): string => {
+    if (val == null) return '';
+    if (typeof val === 'object' && val.id !== undefined) return String(val.id);
+    return String(val);
+  };
+
+  const myVictimes = victimes.filter(v => getStrId(v.auteur_user_id) === String(user.id));
 
   return (
     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
@@ -64,21 +74,45 @@ export function TemoinDashboard({ temoin, victimes, fragments, parcours, qualite
           <div>
             <h2 className="text-3xl font-bold flex items-center gap-3 mb-2">
               <User className="h-8 w-8 text-primary" />
-              {temoin.prenom} {temoin.nom}
+              {user.first_name} {user.last_name}
             </h2>
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-3">
-              <span className="flex items-center gap-1.5"><Mail size={16}/> {temoin.email || "Aucun email"}</span>
-              <span className="flex items-center gap-1.5"><CalendarDays size={16}/> Inscrit le : {temoin.date_creation ? new Date(temoin.date_creation).toLocaleDateString('fr-FR') : "Inconnue"}</span>
+              <span className="flex items-center gap-1.5"><Mail size={16}/> {user.email || "Aucun email"}</span>
+              <span className="flex items-center gap-1.5"><CalendarDays size={16}/> Inscrit le : {user.date_created ? new Date(user.date_created).toLocaleDateString('fr-FR') : "Inconnue"}</span>
               <span className="flex items-center gap-1.5 font-medium text-foreground"><Users size={16} className="text-primary"/> {myVictimes.length} victime(s) ajoutée(s)</span>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <span className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Statut du contributeur</span>
-            <StatutSelect
-              value={getId(temoin.statut_id)}
-              options={qualiteStatuts.map(s => ({ value: s.id, label: s.libelle }))}
-              onChange={(val) => onStatusChange("mmrl_temoins", temoin.id, val)}
-            />
+            <span className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Compte membre</span>
+            <Select
+              value={user.status || 'active'}
+              onValueChange={async (val) => {
+                try {
+                  await directus.request(updateUser(user.id, { status: val } as any));
+                  toast.success(`Compte ${val === 'active' ? 'activé' : 'désactivé'}`);
+                } catch (err: any) {
+                  toast.error('Erreur : ' + err.message);
+                }
+              }}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
+                    Actif
+                  </span>
+                </SelectItem>
+                <SelectItem value="inactive">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-red-400 inline-block" />
+                    Inactif
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

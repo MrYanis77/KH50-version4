@@ -10,16 +10,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, Plus } from "lucide-react";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { notifyAdminsOnCreate } from "@/services/notificationService";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AddFragmentDialogProps {
   victimeId: number;
-  auteurTemoinId: number;
+  auteurUserId: string;
   onSuccess: () => void;
   qualiteStatuts: any[];
   typeFragments: any[];
 }
 
-export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualiteStatuts, typeFragments }: AddFragmentDialogProps) {
+export function AddFragmentDialog({ victimeId, auteurUserId, onSuccess, qualiteStatuts, typeFragments }: AddFragmentDialogProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -48,7 +51,7 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualit
 
       const payload = {
         victime_id: victimeId,
-        auteur_temoin_id: auteurTemoinId,
+        auteur_user_id: auteurUserId,
         type_id: form.type_id,
         titre: form.titre || null,
         description: form.description,
@@ -58,7 +61,11 @@ export function AddFragmentDialog({ victimeId, auteurTemoinId, onSuccess, qualit
       };
       console.log("[AddFragment] Payload:", payload);
 
-      await directus.request(createItem("mmrl_fragments" as any, payload));
+      const res = await directus.request(createItem("mmrl_fragments" as any, payload));
+
+      if (user) {
+        await notifyAdminsOnCreate('mmrl_fragments', (res as any).id, form.titre || "Nouveau fragment", user);
+      }
 
       toast.success("Fragment ajouté avec succès");
       setIsOpen(false);

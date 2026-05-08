@@ -1,14 +1,15 @@
 // =============================================================================
-//  MEMORIAL — Directus Types v4.2
-//  Corrections :
-//    • TypeFragmentRow.code : ajout 'audio'
-//    • TYPE_FRAGMENT_ID : AUDIO = 7 aligné avec le schéma SQL
+//  MEMORIAL — Directus Types v6.0
+//  Aligné sur BDD v3.0 :
+//    - mmrl_temoins supprimée
+//    - auteur_temoin_id → auteur_user_id: string (CHAR(36) → directus_users)
+//    - mmrl_recueil ajoutée (auteur_user_id → directus_users)
+//    - directus_users étendu avec telephone
 // =============================================================================
 
 export interface DirectusSchema {
   mmrl_qualite_statut: QualiteStatutRow[];
   mmrl_type_fragment: TypeFragmentRow[];
-  mmrl_temoins: TemoinRow[];
   mmrl_sources_temoignage: SourceTemoignageRow[];
   mmrl_victimes: VictimeRow[];
   mmrl_parcours: ParcoursRow[];
@@ -18,6 +19,7 @@ export interface DirectusSchema {
   mmrl_recueil: RecueilRow[];
   directus_files: DirectusFilesRow[];
   directus_users: DirectusUsersRow[];
+  mmrl_notifications: NotificationRow[];
 }
 
 // ── Lookup tables ─────────────────────────────────────────────────────────────
@@ -41,26 +43,9 @@ export interface TypeFragmentRow {
   libelle: string;
 }
 
-// ── Core tables ───────────────────────────────────────────────────────────────
+// ── Sources ───────────────────────────────────────────────────────────────────
 
-/** mmrl_temoins — utilisateur enregistré (lié à directus_users) */
-export interface TemoinRow {
-  id: number;
-  directus_user_id: string;
-  prenom: string;
-  nom: string;
-  email?: string;
-  telephone?: string;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
-  statut_id: number;
-  /** Joined field (optional, depends on query) */
-  statut?: QualiteStatutRow;
-  date_creation?: string;
-  date_modification?: string;
-  deleted_at?: string | null;
-}
-
-/** mmrl_sources_temoignage — source d'un témoignage (peut ou non avoir de compte) */
+/** mmrl_sources_temoignage — source d'une info (avec ou sans compte Directus) */
 export interface SourceTemoignageRow {
   id: number;
   /** Nullable : une source sans compte Directus a source_user_id = null */
@@ -69,7 +54,7 @@ export interface SourceTemoignageRow {
   nom: string;
   email?: string | null;
   telephone?: string | null;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
   statut_id: number;
   statut?: QualiteStatutRow;
   date_creation?: string;
@@ -77,17 +62,21 @@ export interface SourceTemoignageRow {
   deleted_at?: string | null;
 }
 
+// ── Core tables ───────────────────────────────────────────────────────────────
+
 /** mmrl_victimes */
 export interface VictimeRow {
   id: number;
-  /** FK → mmrl_temoins.id  (utilisateur qui a ajouté la fiche) */
-  auteur_temoin_id: number;
-  /** FK → mmrl_sources_temoignage.id  (source de l'information) */
+  /** FK → directus_users.id (CHAR 36) */
+  auteur_user_id: string;
+  auteur_user?: DirectusUsersRow;
+  /** FK → mmrl_sources_temoignage.id */
   source_id: number;
+  source?: SourceTemoignageRow;
   prenom: string;
   nom: string;
   /** 0=inconnu, 1=masculin, 2=féminin */
-  sexe?: number | null;
+  sexe?: 0 | 1 | 2 | null;
   annee_naissance?: number | null;
   date_naissance?: string | null;
   lieu_naissance?: string | null;
@@ -98,26 +87,28 @@ export interface VictimeRow {
   origine_familiale?: string | null;
   /** FK → directus_files.id */
   photo_principale?: string | null;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
   statut_id: number;
   statut?: QualiteStatutRow;
   date_creation?: string;
   date_modification?: string;
   deleted_at?: string | null;
+  modifie_par_label?: string | null;
 }
 
 /** mmrl_parcours */
 export interface ParcoursRow {
   id: number;
+  /** FK → mmrl_victimes.id */
   victime_id: number;
   annee_evenement?: number | null;
   date_evenement?: string | null;
   titre?: string | null;
   description?: string | null;
-  /** FK → directus_files.id */
-  fichier_media?: string | null;
+  /** FK → directus_files.id (souvent expand en objet via l’API) */
+  fichier_media?: string | DirectusFilesRow | null;
   ordre: number;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
   statut_id: number;
   statut?: QualiteStatutRow;
   date_creation?: string;
@@ -128,21 +119,94 @@ export interface ParcoursRow {
 /** mmrl_fragments */
 export interface FragmentRow {
   id: number;
+  /** FK → mmrl_victimes.id */
   victime_id: number;
-  /** FK → mmrl_temoins.id */
-  auteur_temoin_id: number;
+  /** FK → directus_users.id (CHAR 36) */
+  auteur_user_id: string;
+  auteur_user?: DirectusUsersRow;
   /** FK → mmrl_sources_temoignage.id (nullable) */
   source_id?: number | null;
-  /** FK → mmrl_type_fragment.id  (default 1 = temoignage) */
+  source?: SourceTemoignageRow | null;
+  /** FK → mmrl_type_fragment.id (default 1 = temoignage) */
   type_id: number;
   type?: TypeFragmentRow;
   titre?: string | null;
   description: string;
   annee_fragment?: number | null;
   date_fragment?: string | null;
-  /** FK → directus_files.id */
-  fichier_media?: string | null;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
+  /** FK → directus_files.id (souvent expand en objet via l’API) */
+  fichier_media?: string | DirectusFilesRow | null;
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+  modifie_par_label?: string | null;
+}
+
+/**
+ * mmrl_relations_familiales — liens de parenté (« araignée »)
+ * victime_id_b OU nom_relatif_externe doit être renseigné (CHECK SQL)
+ */
+export interface RelationFamilialeRow {
+  id: number;
+  /** FK → mmrl_victimes.id */
+  victime_id_a: number;
+  /** FK → mmrl_victimes.id — null si relatif hors base */
+  victime_id_b?: number | null;
+  victime_b?: VictimeRow | null;
+  /** Renseigné si le relatif n'est pas dans la base */
+  nom_relatif_externe?: string | null;
+  type_relation: 'conjoint' | 'parent' | 'enfant' | 'frere_soeur' | 'autre';
+  description?: string | null;
+  /** FK → directus_users.id (CHAR 36, nullable) */
+  auteur_user_id?: string | null;
+  auteur_user?: DirectusUsersRow | null;
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}
+
+/** mmrl_sepultures — sépulture virtuelle (1 par victime max, UNIQUE victime_id) */
+export interface SepultureRow {
+  id: number;
+  /** FK → mmrl_victimes.id (UNIQUE) */
+  victime_id: number;
+  /** FK → directus_users.id (CHAR 36, nullable) */
+  auteur_user_id?: string | null;
+  auteur_user?: DirectusUsersRow | null;
+  type_sepulture: 'stupa' | 'autel' | 'jardin';
+  epitaphe?: string | null;
+  message?: string | null;
+  nb_bougies: number;
+  /** FK → mmrl_qualite_statut.id (default 2 = a_verifier) */
+  statut_id: number;
+  statut?: QualiteStatutRow;
+  date_creation?: string;
+  date_modification?: string;
+  deleted_at?: string | null;
+}
+
+/** mmrl_recueil — carnet de mémoires personnel d'un utilisateur Directus */
+export interface RecueilRow {
+  id: number;
+  /** FK → directus_users.id (CHAR 36) */
+  auteur_user_id: string;
+  auteur_user?: DirectusUsersRow;
+  /** FK → mmrl_type_fragment.id */
+  type_id: number;
+  type?: TypeFragmentRow;
+  titre?: string | null;
+  contenu?: string | null;
+  /** FK → directus_files.id (souvent expand en objet via l’API) */
+  fichier_media?: string | DirectusFilesRow | null;
+  /** true = visible publiquement */
+  is_public: boolean;
+  /** FK → mmrl_qualite_statut.id */
   statut_id: number;
   statut?: QualiteStatutRow;
   date_creation?: string;
@@ -151,49 +215,109 @@ export interface FragmentRow {
 }
 
 /**
- * mmrl_relations_familiales — liens de parenté entre victimes (« araignée »)
- *
- * Règles :
- *  - `victime_id_a` est toujours renseigné
- *  - Si le relatif figure dans la base → `victime_id_b` non null
- *  - Sinon → `nom_relatif_externe` renseigné
+ * Corps JSON pour createItem — champs scalaires tels qu’attendus par l’API,
+ * sans relations expand (`auteur_user`, `statut`, etc.).
  */
-export interface RelationFamilialeRow {
-  id: number;
-  victime_id_a: number;
-  victime_id_b?: number | null;
-  nom_relatif_externe?: string | null;
-  type_relation: 'conjoint' | 'parent' | 'enfant' | 'frere_soeur' | 'autre';
-  description?: string | null;
-  /** FK → mmrl_temoins.id */
-  auteur_temoin_id?: number | null;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
-  statut_id: number;
-  statut?: QualiteStatutRow;
-  /** Champ joint optionnel — la victime liée si victime_id_b non null */
-  victime_b?: VictimeRow | null;
-  date_creation?: string;
-  date_modification?: string;
-  deleted_at?: string | null;
-}
+export type MmrlVictimeInsert = Omit<
+  VictimeRow,
+  | "id"
+  | "auteur_user"
+  | "source"
+  | "statut"
+  | "date_creation"
+  | "date_modification"
+  | "deleted_at"
+  | "modifie_par_label"
+>;
 
-/** mmrl_sepultures — sépulture virtuelle d'une victime (unique par victime) */
-export interface SepultureRow {
-  id: number;
-  victime_id: number;
-  /** FK → mmrl_temoins.id */
-  auteur_temoin_id?: number | null;
-  type_sepulture: 'stupa' | 'autel' | 'jardin';
-  epitaphe?: string | null;
-  message?: string | null;
-  nb_bougies: number;
-  /** FK → mmrl_qualite_statut.id  (default 2 = a_verifier) */
-  statut_id: number;
-  statut?: QualiteStatutRow;
-  date_creation?: string;
-  date_modification?: string;
-  deleted_at?: string | null;
-}
+export type MmrlFragmentInsert = Omit<
+  FragmentRow,
+  | "id"
+  | "auteur_user"
+  | "source"
+  | "type"
+  | "statut"
+  | "date_creation"
+  | "date_modification"
+  | "deleted_at"
+  | "modifie_par_label"
+>;
+
+export type MmrlParcoursInsert = Omit<
+  ParcoursRow,
+  "id" | "statut" | "date_creation" | "date_modification" | "deleted_at"
+>;
+
+export type MmrlSourceTemoignageInsert = Omit<
+  SourceTemoignageRow,
+  "id" | "statut" | "date_creation" | "date_modification" | "deleted_at"
+>;
+
+export type MmrlQualiteStatutInsert = Omit<QualiteStatutRow, "id">;
+
+export type MmrlTypeFragmentInsert = Omit<TypeFragmentRow, "id">;
+
+export type MmrlRelationFamilialeInsert = Omit<
+  RelationFamilialeRow,
+  | "id"
+  | "victime_b"
+  | "statut"
+  | "auteur_user"
+  | "date_creation"
+  | "date_modification"
+  | "deleted_at"
+>;
+
+export type MmrlSepultureInsert = Omit<
+  SepultureRow,
+  | "id"
+  | "auteur_user"
+  | "statut"
+  | "date_creation"
+  | "date_modification"
+  | "deleted_at"
+>;
+
+export type MmrlRecueilInsert = Omit<
+  RecueilRow,
+  | "id"
+  | "auteur_user"
+  | "type"
+  | "statut"
+  | "date_creation"
+  | "date_modification"
+  | "deleted_at"
+>;
+
+export type MmrlNotificationInsert = Omit<NotificationRow, "id" | "date_creation">;
+
+/** Payload minimal pour `createUser` (SDK Directus) */
+export type DirectusUserCreatePayload = {
+  email: string;
+  password: string;
+  role: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  status?: string;
+  telephone?: string | null;
+};
+
+/**
+ * Collections gérées par l’outil d’ajout groupé admin (schéma Directus — hors fichiers binaires).
+ * `directus_files` : préférer l’upload ou l’import.
+ */
+export type MmrlMultiInsertCollection =
+  | "mmrl_qualite_statut"
+  | "mmrl_type_fragment"
+  | "mmrl_sources_temoignage"
+  | "mmrl_victimes"
+  | "mmrl_parcours"
+  | "mmrl_fragments"
+  | "mmrl_relations_familiales"
+  | "mmrl_sepultures"
+  | "mmrl_recueil"
+  | "directus_users"
+  | "mmrl_notifications";
 
 // ── Directus system tables ────────────────────────────────────────────────────
 
@@ -219,6 +343,10 @@ export interface DirectusFilesRow {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * directus_users — étendu avec le champ custom `telephone`
+ * À ajouter via : Settings → Data Model → Users → Add Field (String)
+ */
 export interface DirectusUsersRow {
   id: string;
   first_name?: string;
@@ -242,18 +370,20 @@ export interface DirectusUsersRow {
   external_identifier?: string;
   auth_data?: Record<string, unknown>;
   email_notifications?: boolean;
+  /** Champ custom — ajouter via Directus Data Model avant utilisation */
+  telephone?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Statut IDs as constants for convenience */
 export const STATUT_ID = {
   VERIFIE: 1,
   A_VERIFIER: 2,
   NON_FIABLE: 3,
+  MODIFIE_USER: 4,
+  MODIFIE_ADMIN: 5,
 } as const;
 
-/** Type fragment IDs as constants — alignés avec mmrl_type_fragment SQL */
 export const TYPE_FRAGMENT_ID = {
   TEMOIGNAGE: 1,
   PHOTOGRAPHIE: 2,
@@ -298,24 +428,28 @@ export const TYPE_SEPULTURE_LABELS: Record<TypeSepulture, string> = {
   jardin: 'Jardin du souvenir',
 };
 
-/** mmrl_recueil — carnet de mémoires personnel d'un témoin */
-export interface RecueilRow {
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export type NotificationType = 
+  | 'ajout_victime' 
+  | 'ajout_fragment' 
+  | 'ajout_parcours'
+  | 'ajout_recueil'
+  | 'ajout_relation'
+  | 'ajout_sepulture'
+  | 'modification' 
+  | 'validation' 
+  | 'rejet';
+
+export interface NotificationRow {
   id: number;
-  /** FK → mmrl_temoins.id */
-  auteur_temoin_id: number;
-  /** FK → mmrl_type_fragment.id */
-  type_id: number;
-  type?: TypeFragmentRow;
-  titre?: string | null;
-  contenu?: string | null;
-  /** FK → directus_files.id */
-  fichier_media?: string | null;
-  /** Visibilité choisie par l'utilisateur : true = public, false = privé */
-  is_public: boolean;
-  /** FK → mmrl_qualite_statut.id */
-  statut_id: number;
-  statut?: QualiteStatutRow;
+  destinataire_user_id: string;
+  emetteur_user_id?: string | null;
+  type: NotificationType;
+  collection: string;
+  item_id: number;
+  item_label: string;
+  message: string;
+  lu: boolean;
   date_creation?: string;
-  date_modification?: string;
-  deleted_at?: string | null;
 }

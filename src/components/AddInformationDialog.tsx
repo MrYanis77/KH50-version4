@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Loader2, PenLine, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { notifyAdminsOnCreate } from "@/services/notificationService";
 
 interface AddInformationDialogProps {
   victimeId: number;
@@ -22,7 +23,7 @@ interface AddInformationDialogProps {
 }
 
 export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: initialTypes, statuses: initialStatuses }: AddInformationDialogProps) => {
-  const { user, temoin } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,11 +84,8 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
     setIsSubmitting(true);
     try {
-      // 1. Get witness ID from AuthContext
-      if (!temoin) {
-        throw new Error("Profil témoin introuvable. Veuillez vous reconnecter.");
-      }
-      const temoinId = temoin.id;
+      // 1. Get user ID
+      const userId = user.id;
 
       // 2. Upload media if present (using admin client to ensure it works)
       let uploadedMediaId: string | null = null;
@@ -101,7 +99,7 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
       const payload = {
         victime_id: victimeId,
-        auteur_temoin_id: temoinId,
+        auteur_user_id: userId,
         type_id: fragmentForm.type_id,
         titre: fragmentForm.titre || null,
         description: fragmentForm.description,
@@ -110,10 +108,9 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
         fichier_media: uploadedMediaId,
         statut_id: fragmentForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
       };
-      console.log("[AddInfo] Payload:", payload);
-
-      // 3. Create fragment (using admin client)
-      await directus.request(createItem("mmrl_fragments" as any, payload));
+      const res = await directus.request(createItem("mmrl_fragments" as any, payload));
+      
+      await notifyAdminsOnCreate('mmrl_fragments', (res as any).id, fragmentForm.titre || "Nouveau fragment", user);
 
       toast.success("Votre information a été soumise. Elle sera publiée après vérification.");
       setIsOpen(false);

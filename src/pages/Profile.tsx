@@ -12,21 +12,30 @@ import { toast } from "sonner";
 import { User, MessageSquare, Settings, LogOut, Loader2, Clock, CheckCircle, AlertCircle, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import type { FragmentRow, QualiteStatutRow, VictimeRow, RelationFamilialeRow } from "@/integration/directus-types";
+import type { FragmentRow, QualiteStatutRow, VictimeRow, RelationFamilialeRow, RecueilRow, ParcoursRow, TypeFragmentRow } from "@/integration/directus-types";
 import { TYPE_RELATION_LABELS } from "@/integration/directus-types";
-import { Users, Link as LinkIcon, Pencil, Trash2 } from "lucide-react";
+import { Users, Link as LinkIcon, Pencil, Trash2, BookOpen, Globe, Plus, GalleryVertical } from "lucide-react";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
-import { deleteItem } from "@directus/sdk";
+import { ProfileFragmentDialog } from "@/components/profile/ProfileFragmentDialog";
+import { ProfileParcoursDialog } from "@/components/profile/ProfileParcoursDialog";
 
 const Profile = () => {
-  const { user, temoin, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fragments, setFragments] = useState<FragmentRow[]>([]);
   const [victimes, setVictimes] = useState<VictimeRow[]>([]);
   const [relations, setRelations] = useState<RelationFamilialeRow[]>([]);
+  const [recueil, setRecueil] = useState<RecueilRow[]>([]);
   const [statuts, setStatuts] = useState<QualiteStatutRow[]>([]);
+  const [parcours, setParcours] = useState<ParcoursRow[]>([]);
+  const [typeFragments, setTypeFragments] = useState<TypeFragmentRow[]>([]);
   const [archives, setArchives] = useState<any[]>([]);
   const [fetchingFragments, setFetchingFragments] = useState(true);
+
+  const [fragmentDialogOpen, setFragmentDialogOpen] = useState(false);
+  const [fragmentEditing, setFragmentEditing] = useState<FragmentRow | null>(null);
+  const [parcoursDialogOpen, setParcoursDialogOpen] = useState(false);
+  const [parcoursEditing, setParcoursEditing] = useState<ParcoursRow | null>(null);
 
   // Form states
   const [firstName, setFirstName] = useState(user?.first_name || "");
@@ -46,31 +55,17 @@ const Profile = () => {
 
   const fetchUserContent = async () => {
     // Attendre que les données d'authentification soient prêtes
-    if (!user || !temoin) {
+    if (!user) {
       return;
     }
     
     try {
       setFetchingFragments(true);
       
-      // 1. Récupérer les fragments
-      const fragmentsData = await directus.request(
-        readItems("mmrl_fragments", {
-          filter: {
-            auteur_temoin_id: { _eq: Number(temoin.id) },
-            deleted_at: { _null: true }
-          },
-          sort: ["-date_creation"],
-          fields: ["*", "statut_id.*"]
-        })
-      );
-      setFragments(fragmentsData as unknown as FragmentRow[]);
-
-      // 2. Récupérer les victimes
       const victimesData = await directus.request(
         readItems("mmrl_victimes", {
           filter: {
-            auteur_temoin_id: { _eq: Number(temoin.id) },
+            auteur_user_id: { _eq: user.id },
             deleted_at: { _null: true }
           },
           sort: ["-date_creation"],
@@ -78,38 +73,77 @@ const Profile = () => {
         })
       );
       setVictimes(victimesData as unknown as VictimeRow[]);
+      const vIds = (victimesData as VictimeRow[]).map((v) => v.id);
 
-      // 3. Récupérer les relations familiales
-      const relationsData = await directus.request(
-        readItems("mmrl_relations_familiales", {
-          filter: {
-            auteur_temoin_id: { _eq: Number(temoin.id) },
-            deleted_at: { _null: true }
-          },
-          sort: ["-date_creation"],
-          fields: ["*", "victime_id_a.prenom", "victime_id_a.nom", "victime_id_b.prenom", "victime_id_b.nom", "statut_id.*"]
-        })
-      );
+      const [fragmentsData, relationsData, recueilData, statutsData, typeFragData, parcoursData] = await Promise.all([
+        directus.request(
+          readItems("mmrl_fragments", {
+            filter: {
+              auteur_user_id: { _eq: user.id },
+              deleted_at: { _null: true }
+            },
+            sort: ["-date_creation"],
+            fields: ["*", "statut_id.*", "type_id.id", "type_id.libelle", "type_id.code"]
+          })
+        ),
+        directus.request(
+          readItems("mmrl_relations_familiales", {
+            filter: {
+              auteur_user_id: { _eq: user.id },
+              deleted_at: { _null: true }
+            },
+            sort: ["-date_creation"],
+            fields: ["*", "victime_id_a.prenom", "victime_id_a.nom", "victime_id_b.prenom", "victime_id_b.nom", "statut_id.*"]
+          })
+        ),
+        directus.request(
+          readItems("mmrl_recueil", {
+            filter: {
+              auteur_user_id: { _eq: user.id },
+              deleted_at: { _null: true }
+            },
+            sort: ["-date_creation"],
+            fields: ["*", "statut_id.*", "type_id.*"]
+          })
+        ),
+        directus.request(readItems("mmrl_qualite_statut", { limit: -1 })),
+        directus.request(readItems("mmrl_type_fragment", { limit: -1, fields: ["*"] })),
+        vIds.length
+          ? directus.request(
+              readItems("mmrl_parcours", {
+                filter: { deleted_at: { _null: true }, victime_id: { _in: vIds } },
+                sort: ["ordre", "annee_evenement"],
+                fields: ["*", "statut_id.*", "victime_id.id", "victime_id.prenom", "victime_id.nom"]
+              })
+            )
+          : Promise.resolve([]),
+      ]);
+
+      setFragments(fragmentsData as unknown as FragmentRow[]);
       setRelations(relationsData as unknown as RelationFamilialeRow[]);
-
-      // 4. Récupérer les statuts pour la correspondance des badges
-      const statutsData = await directus.request(
-        readItems("mmrl_qualite_statut", { limit: -1 })
-      );
+      setRecueil(recueilData as unknown as RecueilRow[]);
       setStatuts(statutsData as unknown as QualiteStatutRow[]);
-      // 5. Récupérer les archives de l'utilisateur
-      const [archVictimes, archFragments, archParcours, archRelations] = await Promise.all([
-        directus.request(readItems("mmrl_victimes", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => []),
-        directus.request(readItems("mmrl_fragments", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => []),
-        directus.request(readItems("mmrl_parcours", { filter: { victime_id: { auteur_temoin_id: { _eq: Number(temoin.id) } }, deleted_at: { _nnull: true } } })).catch(() => []),
-        directus.request(readItems("mmrl_relations_familiales", { filter: { auteur_temoin_id: { _eq: Number(temoin.id) }, deleted_at: { _nnull: true } } })).catch(() => [])
+      setTypeFragments(typeFragData as unknown as TypeFragmentRow[]);
+      setParcours(parcoursData as unknown as ParcoursRow[]);
+
+      const [archVictimes, archFragments, archParcours, archRelations, archRecueil] = await Promise.all([
+        directus.request(readItems("mmrl_victimes", { filter: { auteur_user_id: { _eq: user.id }, deleted_at: { _nnull: true } } })).catch(() => []),
+        directus.request(readItems("mmrl_fragments", { filter: { auteur_user_id: { _eq: user.id }, deleted_at: { _nnull: true } } })).catch(() => []),
+        vIds.length
+          ? directus
+              .request(readItems("mmrl_parcours", { filter: { victime_id: { _in: vIds }, deleted_at: { _nnull: true } } }))
+              .catch(() => [])
+          : Promise.resolve([]),
+        directus.request(readItems("mmrl_relations_familiales", { filter: { auteur_user_id: { _eq: user.id }, deleted_at: { _nnull: true } } })).catch(() => []),
+        directus.request(readItems("mmrl_recueil", { filter: { auteur_user_id: { _eq: user.id }, deleted_at: { _nnull: true } } })).catch(() => [])
       ]);
 
       const allArchives = [
         ...archVictimes.map((v: any) => ({ ...v, _type: 'Victime', _collection: 'mmrl_victimes', _title: `${v.prenom} ${v.nom}` })),
         ...archFragments.map((f: any) => ({ ...f, _type: 'Fragment', _collection: 'mmrl_fragments', _title: f.titre || f.description?.substring(0,50) })),
         ...archParcours.map((p: any) => ({ ...p, _type: 'Parcours', _collection: 'mmrl_parcours', _title: p.titre || p.description?.substring(0,50) })),
-        ...archRelations.map((r: any) => ({ ...r, _type: 'Lien Familial', _collection: 'mmrl_relations_familiales', _title: `Lien ID ${r.id}` }))
+        ...archRelations.map((r: any) => ({ ...r, _type: 'Lien Familial', _collection: 'mmrl_relations_familiales', _title: `Lien ID ${r.id}` })),
+        ...archRecueil.map((re: any) => ({ ...re, _type: 'Recueil', _collection: 'mmrl_recueil', _title: re.titre || re.contenu?.substring(0,50) }))
       ].sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime());
 
       setArchives(allArchives);
@@ -124,7 +158,7 @@ const Profile = () => {
 
   useEffect(() => {
     fetchUserContent();
-  }, [temoin?.id, user?.id]);
+  }, [user?.id]);
 
   const handleDeleteRelation = async (id: number) => {
     if (!confirm("Voulez-vous vraiment archiver ce lien de parenté ?")) return;
@@ -180,16 +214,7 @@ const Profile = () => {
         })
       );
       
-      // Also update the temoin record to keep it in sync
-      if (temoin) {
-        await directus.request(
-          // @ts-ignore
-          updateItem("mmrl_temoins", temoin.id, {
-            prenom: firstName,
-            nom: lastName,
-          })
-        );
-      }
+
 
       toast.success("Profil mis à jour avec succès");
     } catch (error) {
@@ -273,24 +298,32 @@ const Profile = () => {
         </div>
 
         <Tabs defaultValue="testimonials" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-5 max-w-[900px] mb-8">
-            <TabsTrigger value="testimonials" className="gap-2">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-8 h-auto bg-transparent border-none">
+            <TabsTrigger value="testimonials" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
               <MessageSquare size={16} />
-              <span className="hidden sm:inline">Témoignages</span>
+              <span className="hidden sm:inline">Fragments</span>
             </TabsTrigger>
-            <TabsTrigger value="victimes" className="gap-2">
+            <TabsTrigger value="parcours" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
+              <GalleryVertical size={16} />
+              <span className="hidden sm:inline">Parcours</span>
+            </TabsTrigger>
+            <TabsTrigger value="recueil" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
+              <BookOpen size={16} />
+              <span className="hidden sm:inline">Mon Recueil</span>
+            </TabsTrigger>
+            <TabsTrigger value="victimes" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
               <Users size={16} />
               <span className="hidden sm:inline">Personnes</span>
             </TabsTrigger>
-            <TabsTrigger value="relations" className="gap-2">
+            <TabsTrigger value="relations" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
               <LinkIcon size={16} />
               <span className="hidden sm:inline">Liens</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
+            <TabsTrigger value="settings" className="gap-2 bg-muted/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 rounded-xl">
               <Settings size={16} />
               <span className="hidden sm:inline">Paramètres</span>
             </TabsTrigger>
-            <TabsTrigger value="archives" className="gap-2 text-orange-600 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">
+            <TabsTrigger value="archives" className="gap-2 bg-orange-50 text-orange-600 data-[state=active]:bg-orange-600 data-[state=active]:text-white py-2 rounded-xl">
               <Trash2 size={16} />
               <span className="hidden sm:inline">Archives</span>
             </TabsTrigger>
@@ -393,7 +426,97 @@ const Profile = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="recueil" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid gap-4">
+              {fetchingFragments ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p>Chargement de votre recueil...</p>
+                </div>
+              ) : recueil.length > 0 ? (
+                recueil.map((entry) => (
+                  <Card key={entry.id} className="overflow-hidden hover:border-primary/30 transition-colors">
+                    <CardContent className="p-0">
+                      <div className="flex flex-col md:flex-row">
+                        <div className="flex-1 p-6 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="secondary" className="text-[10px] uppercase font-bold px-1.5 py-0">
+                                  {entry.type?.libelle || 'Autre'}
+                                </Badge>
+                                {entry.is_public ? (
+                                  <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 border-primary/30 text-primary">
+                                    <Globe className="h-3 w-3" /> Public
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
+                                    <Lock className="h-3 w-3" /> Privé
+                                  </Badge>
+                                )}
+                              </div>
+                              <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                                {entry.titre || "Témoignage sans titre"}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Créé le {entry.date_creation ? format(new Date(entry.date_creation), "PPP", { locale: fr }) : "—"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(entry.statut_id)}
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:bg-destructive/10" 
+                                onClick={() => handleArchiveItem("mmrl_recueil", entry.id)}
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {entry.contenu && (
+                            <p className="text-sm text-foreground/80 line-clamp-2 leading-relaxed">
+                              {entry.contenu}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <BookOpen className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">Votre recueil est vide</h3>
+                    <p className="text-muted-foreground max-w-xs mt-2">
+                      Ajoutez vos récits, photos ou témoignages depuis la page Recueil pour les retrouver ici.
+                    </p>
+                    <Button variant="outline" className="mt-6" asChild>
+                      <a href="/recueil">Accéder au recueil</a>
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
           <TabsContent value="testimonials" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-end mb-4">
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  setFragmentEditing(null);
+                  setFragmentDialogOpen(true);
+                }}
+                disabled={!victimes.length}
+              >
+                <Plus size={16} /> Nouveau fragment
+              </Button>
+            </div>
             <div className="grid gap-4">
               {fetchingFragments ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
@@ -411,12 +534,31 @@ const Profile = () => {
                               <h3 className="font-semibold text-lg text-foreground line-clamp-1">
                                 {fragment.titre || "Témoignage sans titre"}
                               </h3>
+                              {(() => {
+                                const tid = fragment.type_id as unknown;
+                                const label =
+                                  typeof tid === "object" && tid !== null && "libelle" in tid
+                                    ? String((tid as { libelle: string }).libelle)
+                                    : fragment.type?.libelle;
+                                return label ? <p className="text-xs text-muted-foreground mt-0.5">{label}</p> : null;
+                              })()}
                               <p className="text-xs text-muted-foreground">
-                                Publié le {format(new Date(fragment.date_creation), "PPP", { locale: fr })}
+                                Publié le {fragment.date_creation ? format(new Date(fragment.date_creation), "PPP", { locale: fr }) : "—"}
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
                               {getStatusBadge(fragment.statut_id)}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setFragmentEditing(fragment);
+                                  setFragmentDialogOpen(true);
+                                }}
+                                aria-label="Modifier"
+                              >
+                                <Pencil size={16} />
+                              </Button>
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
@@ -455,6 +597,102 @@ const Profile = () => {
                     <Button variant="outline" className="mt-6" asChild>
                       <a href="/memorial">Parcourir le mémorial</a>
                     </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="parcours" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-end mb-4">
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  setParcoursEditing(null);
+                  setParcoursDialogOpen(true);
+                }}
+                disabled={!victimes.length}
+              >
+                <Plus size={16} /> Nouvelle étape
+              </Button>
+            </div>
+            <div className="grid gap-4">
+              {fetchingFragments ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p>Chargement de votre parcours…</p>
+                </div>
+              ) : parcours.length > 0 ? (
+                parcours.map((p) => {
+                  const pv = p.victime_id as unknown;
+                  const victimLabel =
+                    typeof pv === "object" && pv !== null && "prenom" in pv
+                      ? `${(pv as VictimeRow).prenom} ${(pv as VictimeRow).nom}`
+                      : (() => {
+                          const id = typeof pv === "number" ? pv : Number(pv);
+                          const v = victimes.find((x) => x.id === id);
+                          return v ? `${v.prenom} ${v.nom}` : `Fiche #${id}`;
+                        })();
+                  return (
+                    <Card key={p.id} className="overflow-hidden hover:border-primary/30 transition-colors">
+                      <CardContent className="p-0">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="flex-1 p-6 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <Badge variant="outline" className="text-[10px] mb-1">
+                                  {victimLabel}
+                                </Badge>
+                                <h3 className="font-semibold text-lg text-foreground line-clamp-1">
+                                  {p.titre || "Événement sans titre"}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  {p.annee_evenement != null ? `Année ${p.annee_evenement}` : p.date_evenement ? String(p.date_evenement).slice(0, 10) : "—"}
+                                  {p.ordre != null ? ` · ordre ${p.ordre}` : ""}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {getStatusBadge(p.statut_id)}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setParcoursEditing(p);
+                                    setParcoursDialogOpen(true);
+                                  }}
+                                  aria-label="Modifier"
+                                >
+                                  <Pencil size={16} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleArchiveItem("mmrl_parcours", p.id)}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                              </div>
+                            </div>
+                            {p.description && (
+                              <p className="text-sm text-foreground/80 line-clamp-3 leading-relaxed">{p.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <GalleryVertical className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground">Aucun parcours de vie</h3>
+                    <p className="text-muted-foreground max-w-xs mt-2">
+                      Les étapes de parcours liées à vos fiches personne apparaissent ici. Ajoutez d&apos;abord une personne, puis des étapes.
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -652,6 +890,26 @@ const Profile = () => {
             </div>
           </TabsContent>
         </Tabs>
+        {user && (
+          <>
+            <ProfileFragmentDialog
+              open={fragmentDialogOpen}
+              onOpenChange={setFragmentDialogOpen}
+              userId={user.id}
+              victimes={victimes}
+              typeFragments={typeFragments}
+              editing={fragmentEditing}
+              onSaved={fetchUserContent}
+            />
+            <ProfileParcoursDialog
+              open={parcoursDialogOpen}
+              onOpenChange={setParcoursDialogOpen}
+              victimes={victimes}
+              editing={parcoursEditing}
+              onSaved={fetchUserContent}
+            />
+          </>
+        )}
       </main>
     </div>
   );

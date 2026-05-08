@@ -9,14 +9,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Users, Plus, Pencil, Trash2, Loader2, Key, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, ShieldCheck, UserCircle } from "lucide-react";
+import { ROLE_ADMINISTRATOR, ROLE_UTILISATEURS } from "@/contexts/AuthContext";
 
 interface DirectusUser {
   id: string;
   first_name: string | null;
   last_name: string | null;
   email: string;
-  role: string | null;
+  role: string | { id: string } | null;
   status: string;
 }
 
@@ -25,7 +26,21 @@ interface DirectusRole {
   name: string;
 }
 
-export const UsersPanel = () => {
+export type UsersPanelMode = "administrators" | "members";
+
+function normalizeRoleId(role: DirectusUser["role"]): string | null {
+  if (role == null) return null;
+  if (typeof role === "object" && role !== null && "id" in role) {
+    return String((role as { id: string }).id);
+  }
+  return String(role);
+}
+
+interface UsersPanelProps {
+  mode: UsersPanelMode;
+}
+
+export const UsersPanel = ({ mode }: UsersPanelProps) => {
   const [users, setUsers] = useState<DirectusUser[]>([]);
   const [roles, setRoles] = useState<DirectusRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +48,9 @@ export const UsersPanel = () => {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<DirectusUser> & { password?: string }>({});
+
+  const isAdminScope = mode === "administrators";
+  const defaultRoleForCreate = isAdminScope ? ROLE_ADMINISTRATOR : ROLE_UTILISATEURS;
 
   const fetchData = async () => {
     setLoading(true);
@@ -77,7 +95,7 @@ export const UsersPanel = () => {
 
       if (editingUser.id) {
         await directus.request(updateUser(editingUser.id, userData));
-        toast.success("Utilisateur mis à jour");
+        toast.success("Compte mis à jour");
       } else {
         if (!editingUser.password) {
           toast.error("Le mot de passe est obligatoire pour un nouveau compte.");
@@ -85,7 +103,7 @@ export const UsersPanel = () => {
           return;
         }
         await directus.request(createUser(userData));
-        toast.success("Utilisateur créé");
+        toast.success(isAdminScope ? "Administrateur créé" : "Utilisateur créé");
       }
       setIsDialogOpen(false);
       fetchData();
@@ -109,24 +127,46 @@ export const UsersPanel = () => {
 
   const getRoleName = (roleId: string | null) => {
     if (!roleId) return "Public / Aucun";
-    const role = roles.find(r => r.id === roleId);
+    const role = roles.find((r) => r.id === roleId);
     return role ? role.name : "Rôle inconnu";
   };
 
+  const filteredUsers = users.filter((u) => {
+    const rid = normalizeRoleId(u.role);
+    return isAdminScope ? rid === ROLE_ADMINISTRATOR : rid !== ROLE_ADMINISTRATOR;
+  });
+
+  const panelTitle = isAdminScope ? "Administrateurs" : "Utilisateurs & contributeurs";
+  const panelDescription = isAdminScope
+    ? "Comptes avec le rôle administrateur Directus."
+    : "Comptes contributeurs et autres rôles (hors administrateur).";
+  const PanelIcon = isAdminScope ? ShieldCheck : UserCircle;
+  const newButtonLabel = isAdminScope ? "Nouvel administrateur" : "Nouvel utilisateur";
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <Users className="h-6 w-6 text-primary" />
-          Gestion des Utilisateurs
-        </CardTitle>
-        <Button onClick={() => { setEditingUser({ status: 'active' }); setIsDialogOpen(true); }}>
-          <Plus size={18} className="mr-2" /> Nouvel Utilisateur
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <div>
+          <CardTitle className="text-xl flex items-center gap-2">
+            <PanelIcon className="h-6 w-6 text-primary" />
+            {panelTitle}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">{panelDescription}</p>
+        </div>
+        <Button
+          onClick={() => {
+            setEditingUser({ status: "active", role: defaultRoleForCreate });
+            setIsDialogOpen(true);
+          }}
+        >
+          <Plus size={18} className="mr-2" /> {newButtonLabel}
         </Button>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+          <div className="flex justify-center py-12">
+            <Loader2 className="animate-spin h-8 w-8 text-primary" />
+          </div>
         ) : (
           <Table>
             <TableHeader>
@@ -139,7 +179,7 @@ export const UsersPanel = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map(u => (
+              {filteredUsers.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">
                     {u.first_name || u.last_name ? `${u.first_name || ""} ${u.last_name || ""}` : "—"}
@@ -148,17 +188,30 @@ export const UsersPanel = () => {
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-sm">{getRoleName(u.role)}</span>
+                      <span className="text-sm">{getRoleName(normalizeRoleId(u.role))}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${u.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                    >
                       {u.status}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditingUser({...u, password: ""}); setIsDialogOpen(true); }}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingUser({
+                            ...u,
+                            role: normalizeRoleId(u.role) ?? null,
+                            password: "",
+                          });
+                          setIsDialogOpen(true);
+                        }}
+                      >
                         <Pencil size={16} />
                       </Button>
                       <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(u.id)}>
@@ -168,6 +221,13 @@ export const UsersPanel = () => {
                   </TableCell>
                 </TableRow>
               ))}
+              {filteredUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                    {isAdminScope ? "Aucun administrateur listé." : "Aucun utilisateur dans cette vue."}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         )}
@@ -176,7 +236,13 @@ export const UsersPanel = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingUser.id ? "Modifier" : "Créer"} un utilisateur</DialogTitle>
+            <DialogTitle>
+              {editingUser.id
+                ? "Modifier le compte"
+                : isAdminScope
+                  ? "Créer un administrateur"
+                  : "Créer un utilisateur"}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveUser} className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
@@ -195,7 +261,10 @@ export const UsersPanel = () => {
             </div>
             <div className="space-y-2">
               <Label>Rôle</Label>
-              <Select value={editingUser.role || "none"} onValueChange={v => setEditingUser(p => ({...p, role: v === "none" ? null : v}))}>
+              <Select
+                value={normalizeRoleId(editingUser.role as DirectusUser["role"]) || "none"}
+                onValueChange={(v) => setEditingUser((p) => ({ ...p, role: v === "none" ? null : v }))}
+              >
                 <SelectTrigger><SelectValue placeholder="Choisir un rôle" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Public / Aucun</SelectItem>

@@ -14,6 +14,7 @@ import type { VictimeRow } from "@/integration/directus-types";
 import { STATUT_ID } from "@/integration/directus-types";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { notifyAdminsOnCreate, notifyAdminsOnUpdate, getUserLabel } from "@/services/notificationService";
 
 interface ParcoursEntry {
   annee: string;
@@ -81,14 +82,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
-  // — Source du témoignage (qui connaît la victime ?) —
-  const [sourceForm, setSourceForm] = useState({
-    prenom: user?.first_name || "",
-    nom: user?.last_name || "",
-    email: user?.email || "",
-    telephone: "",
-    statut_id: initialStatuses?.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
-  });
 
   // — Parcours entries —
   const [parcoursEntries, setParcoursEntries] = useState<ParcoursEntry[]>([
@@ -108,7 +101,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
   const resetForms = () => {
     const defaultStatutId = statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER;
     setVictimeForm({ prenom: "", nom: "", sexe: "", annee_naissance: "", date_naissance: "", lieu_naissance: "", annee_deces: "", date_deces: "", lieu_deces: "", profession: "", origine_familiale: "", statut_id: defaultStatutId });
-    setSourceForm({ prenom: user?.first_name || "", nom: user?.last_name || "", email: user?.email || "", telephone: "", statut_id: defaultStatutId });
     setPhotoFile(null);
     setParcoursEntries([{ annee: "", titre: "", description: "", statut_id: defaultStatutId }]);
     setStep(0);
@@ -129,14 +121,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
         toast.error("Le prénom et le nom de la victime sont obligatoires.");
         return false;
       }
-      if (!sourceForm.prenom || !sourceForm.nom) {
-        toast.error("Veuillez indiquer votre prénom et nom comme source du témoignage.");
-        return false;
-      }
-      if (!sourceForm.email || !sourceForm.telephone) {
-        toast.error("L'email et le téléphone de la source sont obligatoires.");
-        return false;
-      }
     }
     return true;
   };
@@ -153,38 +137,11 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
       let victimeId = editVictime?.id;
 
       if (!isEdit) {
-        // ── 1. Trouver ou créer le témoin (auteur) lié au compte ──
-        let temoinId: number;
 
-        const byUserId = await directusAuth.request(
-          readItems("mmrl_temoins", { filter: { directus_user_id: { _eq: user.id }, deleted_at: { _null: true } }, limit: 1 })
-        );
 
-        if (byUserId && byUserId.length > 0) {
-          temoinId = (byUserId[0] as any).id;
-        } else {
-          const byEmail = await directusAuth.request(
-            readItems("mmrl_temoins", { filter: { email: { _eq: user.email }, deleted_at: { _null: true } }, limit: 1 })
-          );
+        // ── 2. Trouver ou créer la source du témoignage (automatique depuis le compte) ──
+        let sourceId: number | null = null;
 
-          if (byEmail && byEmail.length > 0) {
-            temoinId = (byEmail[0] as any).id;
-          } else {
-            const t = await directusAuth.request(createItem("mmrl_temoins", {
-              directus_user_id: user.id,
-              prenom: user.first_name || "",
-              nom: user.last_name || "",
-              email: user.email,
-              statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
-            } as any));
-            temoinId = (t as any).id;
-          }
-        }
-
-        // ── 2. Trouver ou créer la source du témoignage ──
-        let sourceId: number;
-
-        // Si l'utilisateur est lui-même la source, chercher dans sources_temoignage par source_user_id
         const bySourceUserId = await directusAuth.request(
           readItems("mmrl_sources_temoignage", { filter: { source_user_id: { _eq: user.id }, deleted_at: { _null: true } }, limit: 1 })
         );
@@ -192,14 +149,12 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
         if (bySourceUserId && bySourceUserId.length > 0) {
           sourceId = (bySourceUserId[0] as any).id;
         } else {
-          // Créer une nouvelle source avec les infos saisies
           const s = await directusAuth.request(createItem("mmrl_sources_temoignage", {
             source_user_id: user.id,
-            prenom: sourceForm.prenom || user.first_name || "",
-            nom: sourceForm.nom || user.last_name || "",
-            email: sourceForm.email || user.email || "",
-            telephone: sourceForm.telephone || "",
-            statut_id: sourceForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
+            prenom: user.first_name || "",
+            nom: user.last_name || "",
+            email: user.email || "",
+            statut_id: statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
           } as any));
           sourceId = (s as any).id;
         }
@@ -215,7 +170,7 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
 
         // ── 4. Créer la victime ──
         const v = await directusAuth.request(createItem("mmrl_victimes", {
-          auteur_temoin_id: temoinId,
+          auteur_user_id: user.id,
           source_id: sourceId,
           prenom: victimeForm.prenom,
           nom: victimeForm.nom,
@@ -232,6 +187,9 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
           statut_id: victimeForm.statut_id || statuses.find(s => s.code === 'a_verifier')?.id || STATUT_ID.A_VERIFIER,
         } as any));
         victimeId = (v as any).id;
+
+        // Notification Admin
+        await notifyAdminsOnCreate('mmrl_victimes', victimeId, `${victimeForm.prenom} ${victimeForm.nom}`, user);
 
       } else {
         // ── Mode édition ──
@@ -256,14 +214,18 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
           profession: victimeForm.profession || null,
           origine_familiale: victimeForm.origine_familiale || null,
           photo_principale: photoId || null,
-          statut_id: victimeForm.statut_id,
+          statut_id: STATUT_ID.MODIFIE_USER,
+          // modifie_par_label: getUserLabel(user), // Activer après création du champ dans Directus
         } as any));
+
+        // Notification Admin
+        await notifyAdminsOnUpdate('mmrl_victimes', editVictime!.id, `${victimeForm.prenom} ${victimeForm.nom}`, user);
       }
 
       // ── 5. Créer les entrées de parcours (création seulement) ──
       if (!isEdit && victimeId) {
         const validParcours = parcoursEntries.filter(p => p.annee || p.description);
-        await Promise.all(
+        const createdRows = await Promise.all(
           validParcours.map((p, idx) =>
             directusAuth.request(createItem("mmrl_parcours", {
               victime_id: victimeId!,
@@ -275,6 +237,12 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
             } as any))
           )
         );
+        for (const row of createdRows) {
+          const pr = row as { id: number; description?: string | null };
+          const d = (pr.description || "").trim();
+          const label = d ? (d.length > 80 ? `${d.slice(0, 80)}…` : d) : `Étape de parcours #${pr.id}`;
+          await notifyAdminsOnCreate("mmrl_parcours", pr.id, label, user);
+        }
       }
 
       toast.success(isEdit ? "Victime mise à jour avec succès." : "Victime ajoutée ! En attente de validation par l'équipe.");
@@ -435,33 +403,6 @@ const AddVictimeDialog = ({ onSuccess, editVictime, triggerLabel, triggerVariant
                 )}
               </div>
 
-              {/* Source du témoignage (création uniquement) */}
-              {!isEdit && (
-                <div className="space-y-3 pt-2 border-t border-border">
-                  <h4 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Source du témoignage</h4>
-                  <p className="text-xs text-muted-foreground">Comment connaissez-vous ces informations ? (votre identité par défaut)</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Prénom *</Label>
-                      <Input value={sourceForm.prenom} onChange={e => setSourceForm(p => ({ ...p, prenom: e.target.value }))} placeholder="Prénom" className="h-8 text-sm" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nom *</Label>
-                      <Input value={sourceForm.nom} onChange={e => setSourceForm(p => ({ ...p, nom: e.target.value }))} placeholder="Nom" className="h-8 text-sm" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Email *</Label>
-                      <Input value={sourceForm.email} onChange={e => setSourceForm(p => ({ ...p, email: e.target.value }))} placeholder="votre@email.com" className="h-8 text-sm" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Téléphone *</Label>
-                      <Input value={sourceForm.telephone} onChange={e => setSourceForm(p => ({ ...p, telephone: e.target.value }))} placeholder="06..." className="h-8 text-sm" />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

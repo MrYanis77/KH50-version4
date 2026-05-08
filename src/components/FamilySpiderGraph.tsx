@@ -11,6 +11,7 @@ import {
   type VictimeRow,
   type RelationFamilialeRow,
 } from "@/integration/directus-types";
+import { notifyAdminsOnCreate } from "@/services/notificationService";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -74,7 +75,7 @@ function useSatellitePositions(relations: RelationFamilialeRow[]): NodeLayout[] 
 // ── Composant principal ─────────────────────────────────────────────────────
 
 export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps) => {
-  const { user, temoin } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { relations, loading, error, refresh } = useRelationsFamiliales(victime.id);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -150,9 +151,9 @@ export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps
                   y1={CENTER}
                   x2={node.x}
                   y2={node.y}
-                  stroke={node.relation.statut_id === STATUT_ID.VERIFIE ? "hsl(var(--accent))" : "#FACC15"}
-                  strokeWidth={node.relation.statut_id === STATUT_ID.VERIFIE ? 2 : 1.5}
-                  strokeDasharray={node.relation.statut_id === STATUT_ID.VERIFIE ? undefined : "6 4"}
+                  stroke="hsl(var(--accent))"
+                  strokeWidth={2}
+                  strokeDasharray={undefined}
                   opacity={0.55}
                 />
               ))}
@@ -219,7 +220,6 @@ export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps
 
               {/* Nœuds satellites */}
               {nodes.map((node) => {
-                const isYellow = node.relation.statut_id !== STATUT_ID.VERIFIE;
                 const clickable = node.linkId != null;
                 const handleClick = () => {
                   if (clickable) navigate(`/memorial/${node.linkId}`);
@@ -235,7 +235,7 @@ export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps
                       cy={node.y}
                       r={SATELLITE_NODE_R}
                       fill="hsl(var(--card))"
-                      stroke={isYellow ? "#FACC15" : "hsl(var(--accent))"}
+                      stroke="hsl(var(--accent))"
                       strokeWidth={2}
                     />
                     <text
@@ -280,11 +280,7 @@ export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps
           <div className="flex items-center justify-center gap-6 mt-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-2">
               <span className="inline-block w-4 h-[2px] bg-accent" />
-              Avéré
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="inline-block w-4 h-[2px] border-t-2 border-yellow-400 border-dashed" />
-              Hypothèse
+              Lien validé
             </span>
           </div>
         )}
@@ -294,7 +290,7 @@ export const FamilySpiderGraph = ({ victime, onRefresh }: FamilySpiderGraphProps
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         victime={victime}
-        temoinId={temoin?.id ?? null}
+        contributor={user}
         onSuccess={handleSuccess}
       />
     </section>
@@ -321,11 +317,11 @@ interface AddRelationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   victime: VictimeRow;
-  temoinId: number | null;
+  contributor: { id: string; first_name?: string; last_name?: string; role?: string | { id: string } } | null;
   onSuccess: () => void;
 }
 
-const AddRelationDialog = ({ open, onOpenChange, victime, temoinId, onSuccess }: AddRelationDialogProps) => {
+const AddRelationDialog = ({ open, onOpenChange, victime, contributor, onSuccess }: AddRelationDialogProps) => {
   const [mode, setMode] = useState<"existant" | "externe">("externe");
   const [typeRelation, setTypeRelation] = useState<TypeRelationCode>("parent");
   const [description, setDescription] = useState("");
@@ -396,17 +392,22 @@ const AddRelationDialog = ({ open, onOpenChange, victime, temoinId, onSuccess }:
 
     setSubmitting(true);
     try {
-      await directus.request(
+      const res = await directus.request(
         createItem("mmrl_relations_familiales" as any, {
           victime_id_a: victime.id,
           victime_id_b: mode === "existant" ? selectedVictime!.id : null,
           nom_relatif_externe: mode === "externe" ? nomExterne.trim() : null,
           type_relation: typeRelation,
           description: description.trim() || null,
-          auteur_temoin_id: temoinId,
+          auteur_user_id: contributor?.id ?? null,
           statut_id: STATUT_ID.A_VERIFIER,
         } as any)
       );
+      if (contributor) {
+        const newId = (res as { id: number }).id;
+        const linkLabel = `${TYPE_RELATION_LABELS[typeRelation]} · ${victime.prenom} ${victime.nom}`;
+        await notifyAdminsOnCreate("mmrl_relations_familiales", newId, linkLabel, contributor as any);
+      }
 
       toast.success("Lien de parenté ajouté. Il sera publié après vérification.");
       reset();

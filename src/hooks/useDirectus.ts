@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { readItems, readItem, createItem } from "@directus/sdk";
+import { readItems, readItem, createItem, readUsers } from "@directus/sdk";
 import { directus } from "@/integration/directus";
 import type {
   VictimeRow, FragmentRow, TemoinRow, ParcoursRow,
@@ -45,7 +45,6 @@ export function useMemorialPerson(id: number) {
   const [person, setPerson] = useState<VictimeRow | null>(null);
   const [fragments, setFragments] = useState<FragmentRow[]>([]);
   const [parcours, setParcours] = useState<ParcoursRow[]>([]);
-  const [temoin, setTemoin] = useState<TemoinRow | null>(null);
   const [source, setSource] = useState<SourceTemoignageRow | null>(null);
   const [isVerified, setIsVerified] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
@@ -66,6 +65,12 @@ export function useMemorialPerson(id: number) {
         readItems("mmrl_parcours", {
           filter: { victime_id: { _eq: id }, deleted_at: { _null: true } },
           sort: ["ordre", "annee_evenement"],
+          fields: [
+            "*",
+            "fichier_media.id",
+            "fichier_media.filename_download",
+            "fichier_media.type",
+          ],
         })
       ).catch(() => []),
       directus.request(readItems("mmrl_qualite_statut", { limit: -1 })).catch(() => [])
@@ -81,23 +86,17 @@ export function useMemorialPerson(id: number) {
         
         const filteredFragments = (f as unknown as FragmentRow[]).filter(frag => {
           const sid = typeof frag.statut_id === 'object' ? (frag.statut_id as any)?.id : frag.statut_id;
-          return validStatutIds.includes(Number(sid));
+          return Number(sid) === STATUT_ID.VERIFIE;
         });
         setFragments(filteredFragments);
 
         const filteredParcours = (pc as unknown as ParcoursRow[]).filter(parc => {
           const sid = typeof parc.statut_id === 'object' ? (parc.statut_id as any)?.id : parc.statut_id;
-          return validStatutIds.includes(Number(sid));
+          return Number(sid) === STATUT_ID.VERIFIE;
         });
         setParcours(filteredParcours);
 
-        // Charger l'auteur (témoin)
-        if (personData.auteur_temoin_id) {
-          try {
-            const t = await directus.request(readItem("mmrl_temoins", personData.auteur_temoin_id));
-            setTemoin(t as unknown as TemoinRow);
-          } catch (_) { /* ignoré */ }
-        }
+
 
         // Charger la source
         if (personData.source_id) {
@@ -111,7 +110,7 @@ export function useMemorialPerson(id: number) {
       .finally(() => setLoading(false));
   }, [id]);
 
-  return { person, fragments, parcours, temoin, source, isVerified, loading, error };
+  return { person, fragments, parcours, source, isVerified, loading, error };
 }
 
 // =============================================================================
@@ -119,7 +118,7 @@ export function useMemorialPerson(id: number) {
 // =============================================================================
 export function useAdminData() {
   const [victimes, setVictimes] = useState<VictimeRow[]>([]);
-  const [temoins, setTemoins] = useState<TemoinRow[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [sources, setSources] = useState<SourceTemoignageRow[]>([]);
   const [parcours, setParcours] = useState<ParcoursRow[]>([]);
   const [fragments, setFragments] = useState<FragmentRow[]>([]);
@@ -133,11 +132,11 @@ export function useAdminData() {
   useEffect(() => {
     const fetchAdminData = async () => {
       const results = await Promise.allSettled([
-        directus.request(readItems("mmrl_victimes", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
-        directus.request(readItems("mmrl_temoins", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
-        directus.request(readItems("mmrl_sources_temoignage", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
-        directus.request(readItems("mmrl_parcours", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
-        directus.request(readItems("mmrl_fragments", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*.*"] })),
+        directus.request(readItems("mmrl_victimes", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["id", "auteur_user_id", "source_id", "prenom", "nom", "sexe", "annee_naissance", "date_naissance", "lieu_naissance", "annee_deces", "date_deces", "lieu_deces", "profession", "origine_familiale", "photo_principale", "statut_id", "date_creation", "date_modification", "deleted_at"] })),
+        directus.request(readItems("mmrl_sources_temoignage", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*"] })),
+        directus.request(readItems("mmrl_parcours", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["*"] })),
+        directus.request(readItems("mmrl_fragments", { limit: -1, filter: { deleted_at: { _null: true } }, fields: ["id", "victime_id", "auteur_user_id", "source_id", "type_id", "titre", "description", "annee_fragment", "date_fragment", "statut_id", "date_creation", "date_modification", "deleted_at", "fichier_media.id", "fichier_media.filename_download", "fichier_media.type"] })),
+        directus.request(readUsers({ limit: -1, fields: ["id", "first_name", "last_name", "email"] })),
         directus.request(readItems("mmrl_qualite_statut", { limit: -1, fields: ["*"] })),
         directus.request(readItems("mmrl_type_fragment", { limit: -1, fields: ["*"] })),
       ]);
@@ -147,24 +146,23 @@ export function useAdminData() {
       if (results[0].status === "fulfilled") setVictimes(results[0].value as unknown as VictimeRow[]);
       else errors.victimes = (results[0] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
 
-      if (results[1].status === "fulfilled") setTemoins(results[1].value as unknown as TemoinRow[]);
-      else errors.temoins = (results[1] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
+      if (results[1].status === "fulfilled") setSources(results[1].value as unknown as SourceTemoignageRow[]);
+      else errors.sources = (results[1] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
 
-      if (results[2].status === "fulfilled") setSources(results[2].value as unknown as SourceTemoignageRow[]);
-      else errors.sources = (results[2] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
+      if (results[2].status === "fulfilled") setParcours(results[2].value as unknown as ParcoursRow[]);
+      else errors.parcours = (results[2] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
 
-      if (results[3].status === "fulfilled") setParcours(results[3].value as unknown as ParcoursRow[]);
-      else errors.parcours = (results[3] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
+      if (results[3].status === "fulfilled") setFragments(results[3].value as unknown as FragmentRow[]);
+      else errors.fragments = (results[3] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
 
-      if (results[4].status === "fulfilled") setFragments(results[4].value as unknown as FragmentRow[]);
-      else errors.fragments = (results[4] as PromiseRejectedResult).reason?.message || "Erreur inconnue";
+      if (results[4].status === "fulfilled") setUsers(results[4].value as any[]);
 
       if (results[5].status === "fulfilled") setQualiteStatuts(results[5].value as unknown as QualiteStatutRow[]);
       if (results[6].status === "fulfilled") setTypeFragments(results[6].value as unknown as TypeFragmentRow[]);
 
       setCollectionErrors(errors);
 
-      const allRejected = results.slice(0, 5).every(r => r.status === "rejected");
+      const allRejected = results.slice(0, 4).every(r => r.status === "rejected");
       if (allRejected) {
         setError("Impossible de charger les données. Vérifiez vos permissions Directus.");
       }
@@ -183,9 +181,9 @@ export function useAdminData() {
   };
 
   return {
-    victimes, temoins, sources, parcours, fragments, qualiteStatuts, typeFragments,
+    victimes, users, sources, parcours, fragments, qualiteStatuts, typeFragments,
     loading, error, collectionErrors, refreshAction,
-    setVictimes, setTemoins, setSources, setParcours, setFragments,
+    setVictimes, setUsers, setSources, setParcours, setFragments,
   };
 }
 
@@ -211,6 +209,7 @@ export function useRelationsFamiliales(victimeId: number | null | undefined) {
           filter: {
             _and: [
               { deleted_at: { _null: true } },
+              { statut_id: { _eq: STATUT_ID.VERIFIE } },
               {
                 _or: [
                   { victime_id_a: { _eq: victimeId } },
@@ -255,6 +254,8 @@ export function useRelationsFamiliales(victimeId: number | null | undefined) {
 // =============================================================================
 export function useSepulture(victimeId: number | null | undefined) {
   const [sepulture, setSepulture] = useState<SepultureRow | null>(null);
+  /** Contribution existante mais pas encore validée (rien n'est affiché au public). */
+  const [sepulturePendingValidation, setSepulturePendingValidation] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -273,12 +274,27 @@ export function useSepulture(victimeId: number | null | undefined) {
             victime_id: { _eq: victimeId },
             deleted_at: { _null: true },
           },
-          limit: 1,
+          limit: -1,
         })
       )
       .then((data) => {
         const arr = data as unknown as SepultureRow[];
-        setSepulture(arr.length > 0 ? arr[0] : null);
+        const normSid = (row: SepultureRow) => {
+          const s = row.statut_id;
+          return typeof s === "object" ? Number((s as { id?: number }).id) : Number(s);
+        };
+        const verified = arr.find((r) => normSid(r) === STATUT_ID.VERIFIE);
+        const pending = arr.find((r) => normSid(r) !== STATUT_ID.VERIFIE);
+        if (verified) {
+          setSepulture(verified);
+          setSepulturePendingValidation(false);
+        } else if (pending) {
+          setSepulture(null);
+          setSepulturePendingValidation(true);
+        } else {
+          setSepulture(null);
+          setSepulturePendingValidation(false);
+        }
         setError(null);
       })
       .catch((e: any) => setError(e.message || "Erreur inconnue"))
@@ -287,7 +303,7 @@ export function useSepulture(victimeId: number | null | undefined) {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  return { sepulture, loading, error, refresh };
+  return { sepulture, sepulturePendingValidation, loading, error, refresh };
 }
 
 // =============================================================================
@@ -305,10 +321,20 @@ export function usePublicRecueil() {
       .request(
         readItems("mmrl_recueil", {
           filter: {
-            is_public: { _eq: true },
-            deleted_at: { _null: true },
+            _and: [
+              { is_public: { _eq: true } },
+              { deleted_at: { _null: true } },
+              { statut_id: { _eq: STATUT_ID.VERIFIE } },
+            ],
           },
-          fields: ["*", "type_id.*", "statut_id.*"],
+          fields: [
+            "*",
+            "type_id.*",
+            "statut_id.*",
+            "fichier_media.id",
+            "fichier_media.filename_download",
+            "fichier_media.type",
+          ],
           sort: ["-date_creation"],
           limit: -1,
         })
@@ -328,7 +354,7 @@ export function usePublicRecueil() {
 // =============================================================================
 // Hook — recueil personnel d'un témoin (toutes entrées non-archivées)
 // =============================================================================
-export function useMyRecueil(temoinId: number | null | undefined) {
+export function useMyRecueil(userId: string | null | undefined) {
   const [entries, setEntries] = useState<RecueilRow[]>([]);
   const [archives, setArchives] = useState<RecueilRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -336,7 +362,7 @@ export function useMyRecueil(temoinId: number | null | undefined) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!temoinId) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -345,10 +371,17 @@ export function useMyRecueil(temoinId: number | null | undefined) {
       directus.request(
         readItems("mmrl_recueil", {
           filter: {
-            auteur_temoin_id: { _eq: temoinId },
+            auteur_user_id: { _eq: userId },
             deleted_at: { _null: true },
           },
-          fields: ["*", "type_id.*", "statut_id.*"],
+          fields: [
+            "*",
+            "type_id.*",
+            "statut_id.*",
+            "fichier_media.id",
+            "fichier_media.filename_download",
+            "fichier_media.type",
+          ],
           sort: ["-date_creation"],
           limit: -1,
         })
@@ -356,10 +389,17 @@ export function useMyRecueil(temoinId: number | null | undefined) {
       directus.request(
         readItems("mmrl_recueil", {
           filter: {
-            auteur_temoin_id: { _eq: temoinId },
+            auteur_user_id: { _eq: userId },
             deleted_at: { _nnull: true },
           },
-          fields: ["*", "type_id.*", "statut_id.*"],
+          fields: [
+            "*",
+            "type_id.*",
+            "statut_id.*",
+            "fichier_media.id",
+            "fichier_media.filename_download",
+            "fichier_media.type",
+          ],
           sort: ["-deleted_at"],
           limit: -1,
         })
@@ -372,7 +412,7 @@ export function useMyRecueil(temoinId: number | null | undefined) {
       })
       .catch((e: any) => setError(e.message || "Erreur inconnue"))
       .finally(() => setLoading(false));
-  }, [temoinId, refreshKey]);
+  }, [userId, refreshKey]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   return { entries, archives, loading, error, refresh };

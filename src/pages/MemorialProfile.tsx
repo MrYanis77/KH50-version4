@@ -1,25 +1,34 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned, Pencil, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Clock, MapPin, User, Briefcase, Heart, X, BookOpen, Camera, Video, FileText, MapPinned, Pencil, Loader2, ShieldCheck } from "lucide-react";
 import { useMemorialPerson } from "@/hooks/useDirectus";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { directus, getAssetUrl } from "@/integration/directus";
+import { directus, getAssetUrl, directusVideoMimeHint } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
-import { TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import { TYPE_FRAGMENT_ID, STATUT_ID, type VictimeRow } from "@/integration/directus-types";
 import { toast } from "sonner";
 import { AddInformationDialog } from "@/components/AddInformationDialog";
+import { MediaRenderer } from "@/components/MediaRenderer";
 import FamilySpiderGraph from "@/components/FamilySpiderGraph";
 import SepultureVirtuelle from "@/components/SepultureVirtuelle";
+import { notifyAdminsOnCreate } from "@/services/notificationService";
 
+function victimeStatutNumeric(v: VictimeRow): number {
+  const s = v.statut_id;
+  if (s == null) return 0;
+  if (typeof s === "object" && "id" in s) return Number((s as { id: number }).id);
+  return Number(s);
+}
 
 const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } };
 
@@ -59,6 +68,14 @@ const MemorialProfile = () => {
   });
   const [parcoursFile, setParcoursFile] = useState<File | null>(null);
 
+  const lightboxTypeForFragment = (frag: NonNullable<typeof fragments>[number]) => {
+    const code = frag.type?.code || '';
+    const tid = frag.type_id;
+    if (code === 'video' || tid === TYPE_FRAGMENT_ID.VIDEO || code === 'audio' || tid === TYPE_FRAGMENT_ID.AUDIO) return 'video' as const;
+    if (code === 'document' || tid === TYPE_FRAGMENT_ID.DOCUMENT) return 'pdf' as const;
+    return 'image' as const;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'fragment' | 'parcours') => {
     if (e.target.files?.[0]) {
       if (type === 'fragment') setFragmentFile(e.target.files[0]);
@@ -86,16 +103,23 @@ const MemorialProfile = () => {
         mediaId = (uploadResult as any).id;
       }
 
-      await directus.request(
+      const res = await directus.request(
         createItem("mmrl_parcours" as any, {
           victime_id: Number(id),
           annee_evenement: parcoursForm.annee ? Number(parcoursForm.annee) : null,
           description: parcoursForm.description,
           fichier_media: mediaId,
           ordre: 0,
-          statut_id: 2, // a_verifier
+          statut_id: STATUT_ID.A_VERIFIER,
         })
       );
+
+      const newId = (res as { id: number }).id;
+      const desc = parcoursForm.description.trim();
+      const label = desc.length > 80 ? `${desc.slice(0, 80)}…` : desc;
+      if (user) {
+        await notifyAdminsOnCreate("mmrl_parcours", newId, label || "Étape de parcours", user as any);
+      }
 
       toast.success("L'étape de parcours a été envoyée et sera validée prochainement.");
       setShowParcoursForm(false);
@@ -141,6 +165,7 @@ const MemorialProfile = () => {
   }
 
   const imageSrc = getAssetUrl(person.photo_principale);
+  const profilValideParAdmin = victimeStatutNumeric(person) === STATUT_ID.VERIFIE;
 
   return (
     <div className="min-h-screen bg-background font-body">
@@ -186,6 +211,19 @@ const MemorialProfile = () => {
               </Button>
             )}
           </motion.div>
+
+          {profilValideParAdmin && (
+            <motion.div variants={fadeUp} className="mb-8">
+              <Alert className="border-emerald-500/40 bg-emerald-50/70 text-foreground dark:bg-emerald-950/25 dark:border-emerald-500/30">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <AlertTitle className="text-emerald-900 dark:text-emerald-100">Profil validé par l&apos;équipe</AlertTitle>
+                <AlertDescription className="text-emerald-800/90 dark:text-emerald-100/85">
+                  Les administrateurs du mémorial ont vérifié et validé cette fiche. Les informations ci-dessous sont publiées comme
+                  <span className="font-medium"> avérées</span>.
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
 
           <motion.div variants={fadeUp} className="flex flex-col sm:flex-row items-center sm:items-end gap-8">
             <div className="w-40 h-52 rounded-lg overflow-hidden shadow-lg border-2 border-secondary flex-shrink-0 bg-muted">
@@ -314,35 +352,17 @@ const MemorialProfile = () => {
                     <span className="text-xs text-muted-foreground ml-auto">{frag.date_fragment || (frag.annee_fragment ? String(frag.annee_fragment) : '')}</span>
                   </div>
                   <p className="text-foreground leading-relaxed">{frag.description}</p>
-                  <p className="text-xs text-muted-foreground mt-2">— Source : {frag.auteur_temoin_id ? 'Témoin' : 'Anonyme'}</p>
+                  <p className="text-xs text-muted-foreground mt-2">— Source : {frag.auteur_user_id ? 'Témoin' : 'Anonyme'}</p>
                   {frag.fichier_media && (
                     <div className="mt-4">
-                      {frag.type?.code === 'video' || frag.type_id === 3 ? (
-                        <video 
-                          src={getAssetUrl(frag.fichier_media)} 
-                          controls 
-                          preload="metadata"
-                          playsInline
-                          className="max-h-96 w-full rounded-lg bg-black"
-                        />
-                      ) : frag.type?.code === 'audio' || frag.type_id === 7 ? (
-                        <audio 
-                          src={getAssetUrl(frag.fichier_media)} 
-                          controls 
-                          preload="metadata"
-                          className="w-full"
-                        />
-                      ) : (
-                        <img 
-                            src={getAssetUrl(frag.fichier_media)} 
-                            alt="Archive" 
-                            className="max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => setLightboxMedia({ 
-                              url: getAssetUrl(frag.fichier_media), 
-                              type: frag.type?.code === 'document' ? 'pdf' : 'image' 
-                            })}
-                        />
-                      )}
+                      <MediaRenderer
+                        fileId={frag.fichier_media}
+                        mimeType={frag.type?.code === 'video' ? 'video/mp4' : frag.type?.code === 'audio' ? 'audio/mpeg' : undefined}
+                        onClick={() => setLightboxMedia({
+                          url: getAssetUrl(frag.fichier_media),
+                          type: lightboxTypeForFragment(frag),
+                        })}
+                      />
                     </div>
                   )}
                 </motion.div>
@@ -376,14 +396,12 @@ const MemorialProfile = () => {
                     <div className="flex-grow bg-card rounded-xl p-5 border border-border shadow-sm">
                       <p className="text-foreground leading-relaxed">{item.description}</p>
                       {item.fichier_media && (
-                        <div className="mt-4 rounded-lg overflow-hidden border border-border max-w-sm">
-                          <img 
-                            src={getAssetUrl(item.fichier_media)} 
-                            alt="Document de parcours" 
-                            className="w-full h-auto cursor-pointer hover:scale-105 transition-transform"
-                            onClick={() => setLightboxMedia({ 
-                              url: getAssetUrl(item.fichier_media), 
-                              type: 'image' // On suppose que c'est une image ici, ou pdf si on veut
+                        <div className="mt-4">
+                          <MediaRenderer
+                            fileId={item.fichier_media}
+                            onClick={() => setLightboxMedia({
+                              url: getAssetUrl(item.fichier_media),
+                              type: 'image',
                             })}
                           />
                         </div>
@@ -440,10 +458,17 @@ const MemorialProfile = () => {
                   )}
                   {frag.type?.code === 'video' ? (
                     <div className="w-full h-full relative">
-                      <video 
-                        src={getAssetUrl(frag.fichier_media)} 
+                      <video
                         className="w-full h-full object-cover"
-                      />
+                        muted
+                        playsInline
+                        preload="metadata"
+                      >
+                        <source
+                          src={getAssetUrl(frag.fichier_media)}
+                          type={directusVideoMimeHint(frag.fichier_media)}
+                        />
+                      </video>
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
                         <Video className="w-12 h-12 text-white/80" />
                       </div>
@@ -490,7 +515,9 @@ const MemorialProfile = () => {
               </button>
               
               {lightboxMedia.type === 'video' ? (
-                <video src={lightboxMedia.url} controls autoPlay preload="auto" playsInline className="rounded-lg max-w-full max-h-[90vh] shadow-2xl" />
+                <video controls autoPlay preload="auto" playsInline className="rounded-lg max-w-full max-h-[90vh] shadow-2xl">
+                  <source src={lightboxMedia.url} type="video/mp4" />
+                </video>
               ) : lightboxMedia.type === 'pdf' ? (
                 <div className="w-full h-full flex flex-col gap-4">
                   <div className="flex-1 bg-white rounded-lg overflow-hidden shadow-2xl">

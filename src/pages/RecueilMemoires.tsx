@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { directusAuth, getAssetUrl } from "@/integration/directus";
-import { createItem, updateItem } from "@directus/sdk";
+import { directus, directusAuth, getAssetUrl, directusVideoMimeHint } from "@/integration/directus";
+import { createItem, uploadFiles, readItems } from "@directus/sdk";
 import { usePublicRecueil } from "@/hooks/useDirectus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,59 +15,135 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
   BookOpen, Plus, Search, Lock, Globe,
   MessageSquare, Camera, Video, FileText, Mic,
-  ChevronRight, Loader2, ArrowRight, Upload
+  Loader2, ArrowRight, Upload
 } from "lucide-react";
-import type { RecueilRow } from "@/integration/directus-types";
+import type { RecueilRow, TypeFragmentCode, TypeFragmentRow } from "@/integration/directus-types";
+import { STATUT_ID } from "@/integration/directus-types";
+import { notifyAdminsOnCreate } from "@/services/notificationService";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const TYPE_OPTIONS = [
-  { id: 1, code: "temoignage", label: "Témoignage écrit",  icon: MessageSquare },
-  { id: 2, code: "photographie", label: "Photographie",      icon: Camera },
-  { id: 3, code: "video",   label: "Vidéo",              icon: Video },
-  { id: 4, code: "recit",   label: "Récit",              icon: FileText },
-  { id: 7, code: "audio",   label: "Enregistrement audio", icon: Mic },
+// Codes autorisés pour le formulaire « recueil » (aligné plan ; pas document/lieu)
+const RECUEIL_TYPE_CODES = new Set<TypeFragmentCode>([
+  "temoignage",
+  "photographie",
+  "video",
+  "recit",
+  "audio",
+]);
+
+const RECUEIL_TYPE_ORDER: readonly TypeFragmentCode[] = [
+  "temoignage",
+  "photographie",
+  "video",
+  "recit",
+  "audio",
 ];
 
+const TYPE_ICON_BY_CODE: Record<TypeFragmentCode, LucideIcon> = {
+  temoignage: MessageSquare,
+  photographie: Camera,
+  video: Video,
+  recit: FileText,
+  document: FileText,
+  lieu: BookOpen,
+  audio: Mic,
+};
+
+const TYPE_LABEL_FALLBACK: Partial<Record<TypeFragmentCode, string>> = {
+  temoignage: "Témoignage écrit",
+  photographie: "Photographie",
+  video: "Vidéo",
+  recit: "Récit",
+  audio: "Enregistrement audio",
+};
+
 const getTypeIcon = (code: string | undefined) => {
-  const t = TYPE_OPTIONS.find(t => t.code === code);
-  const Icon = t?.icon || BookOpen;
+  const key = code as TypeFragmentCode | undefined;
+  const Icon = (key && TYPE_ICON_BY_CODE[key]) || BookOpen;
   return <Icon className="h-4 w-4" />;
 };
 
 const getTypeLabel = (code: string | undefined) => {
-  return TYPE_OPTIONS.find(t => t.code === code)?.label || "Autre";
+  const key = code as TypeFragmentCode | undefined;
+  return (key && TYPE_LABEL_FALLBACK[key]) || "Autre";
 };
 
 const isVideo = (code?: string) => code === "video";
 const isAudio = (code?: string) => code === "audio";
-const isPhoto = (code?: string) => code === "photographie";
 
 // ---------------------------------------------------------------------------
 // AddRecueilDialog
 // ---------------------------------------------------------------------------
 interface AddDialogProps {
-  temoinId: number;
+  contributor: { id: string; first_name?: string; last_name?: string; role?: string | { id: string } };
   onSuccess: () => void;
 }
 
-const AddRecueilDialog = ({ temoinId, onSuccess }: AddDialogProps) => {
+const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
-  const [typeId, setTypeId] = useState("1");
+  const [typeId, setTypeId] = useState("");
+  const [recueilTypes, setRecueilTypes] = useState<TypeFragmentRow[]>([]);
+  const [typesLoading, setTypesLoading] = useState(false);
+  const [typesError, setTypesError] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTypesLoading(true);
+    setTypesError(null);
+    directus
+      .request(readItems("mmrl_type_fragment", { limit: -1, fields: ["id", "code", "libelle"] }))
+      .then((rows) => {
+        if (cancelled) return;
+        const filtered = (rows as TypeFragmentRow[])
+          .filter((t) => RECUEIL_TYPE_CODES.has(t.code))
+          .sort(
+            (a, b) =>
+              RECUEIL_TYPE_ORDER.indexOf(a.code) - RECUEIL_TYPE_ORDER.indexOf(b.code)
+          );
+        setRecueilTypes(filtered);
+        setTypeId((prev) => {
+          if (filtered.length === 0) return "";
+          const stillValid = prev && filtered.some((t) => String(t.id) === prev);
+          if (stillValid) return prev;
+          const def = filtered.find((t) => t.code === "temoignage") ?? filtered[0];
+          return String(def.id);
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTypesError("Impossible de charger les types de contenu.");
+          setRecueilTypes([]);
+          setTypeId("");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTypesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!typeId) {
+      toast.error(typesError || "Les types ne sont pas encore chargés.");
+      return;
+    }
     if (!contenu.trim() && !mediaFile) {
       toast.error("Veuillez saisir un contenu ou joindre un fichier.");
       return;
@@ -80,32 +156,54 @@ const AddRecueilDialog = ({ temoinId, onSuccess }: AddDialogProps) => {
       if (mediaFile) {
         const formData = new FormData();
         formData.append("file", mediaFile);
-        const resp = await fetch("/files", {
-          method: "POST",
-          body: formData,
-        }).then(r => r.json());
-        fichierMediaId = resp.data?.id || null;
+        
+        const resp = await directusAuth.request(uploadFiles(formData));
+        fichierMediaId = Array.isArray(resp) ? resp[0].id : resp.id;
       }
 
-      await directusAuth.request(
-        createItem("mmrl_recueil", {
-          auteur_temoin_id: temoinId,
-          type_id: Number(typeId),
-          titre: titre.trim() || null,
-          contenu: contenu.trim() || null,
-          fichier_media: fichierMediaId,
-          is_public: isPublic,
-          statut_id: 2, // À vérifier par défaut
-        })
+      const payload = {
+        auteur_user_id: contributor.id,
+        type_id: Number(typeId),
+        titre: titre.trim() || null,
+        contenu: contenu.trim() || null,
+        fichier_media: fichierMediaId,
+        is_public: isPublic,
+        statut_id: STATUT_ID.A_VERIFIER,
+      };
+
+      console.log("[Recueil] Envoi du payload:", payload);
+
+      const res = await directusAuth.request(createItem("mmrl_recueil", payload));
+      const newId = (res as { id: number }).id;
+      await notifyAdminsOnCreate(
+        "mmrl_recueil",
+        newId,
+        titre.trim() || "Nouvelle entrée au recueil",
+        contributor as any
       );
 
-      toast.success("Votre entrée a été ajoutée au recueil !");
+      toast.success(
+        isPublic
+          ? "Votre entrée a été envoyée. Elle sera visible publiquement après validation par l'équipe."
+          : "Votre entrée a été enregistrée."
+      );
       setOpen(false);
-      setTitre(""); setContenu(""); setTypeId("1"); setIsPublic(true); setMediaFile(null);
+      setTitre("");
+      setContenu("");
+      setIsPublic(true);
+      setMediaFile(null);
+      const def = recueilTypes.find((t) => t.code === "temoignage") ?? recueilTypes[0];
+      setTypeId(def ? String(def.id) : "");
       onSuccess();
-    } catch (err) {
-      toast.error("Erreur lors de la création. Vérifiez vos permissions.");
-      console.error(err);
+    } catch (err: any) {
+      console.error("[Recueil] Erreur complète:", err);
+      if (Array.isArray(err?.errors)) {
+        console.error("[Recueil] Détails Directus:", err.errors);
+      }
+      if (err.response?.data?.errors) {
+        console.error("[Recueil] Détails (response.data):", err.response.data.errors);
+      }
+      toast.error("Erreur lors de la création. Vérifiez les détails dans la console.");
     } finally {
       setSaving(false);
     }
@@ -126,16 +224,30 @@ const AddRecueilDialog = ({ temoinId, onSuccess }: AddDialogProps) => {
           {/* Type */}
           <div className="space-y-1.5">
             <Label>Type de contenu</Label>
-            <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            {typesError && (
+              <p className="text-sm text-destructive">{typesError}</p>
+            )}
+            <Select
+              value={typeId}
+              onValueChange={setTypeId}
+              disabled={typesLoading || recueilTypes.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={typesLoading ? "Chargement…" : "Choisir un type"}
+                />
+              </SelectTrigger>
               <SelectContent>
-                {TYPE_OPTIONS.map(t => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    <span className="flex items-center gap-2">
-                      <t.icon className="h-4 w-4" /> {t.label}
-                    </span>
-                  </SelectItem>
-                ))}
+                {recueilTypes.map((t) => {
+                  const Icon = TYPE_ICON_BY_CODE[t.code] ?? BookOpen;
+                  return (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      <span className="flex items-center gap-2">
+                        <Icon className="h-4 w-4" /> {t.libelle}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -190,7 +302,7 @@ const AddRecueilDialog = ({ temoinId, onSuccess }: AddDialogProps) => {
 
           <div className="flex justify-end gap-3 pt-1">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !typeId || typesLoading}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Publier
             </Button>
@@ -215,12 +327,16 @@ const RecueilCard = ({ entry }: { entry: RecueilRow }) => {
         <div className="aspect-video w-full overflow-hidden relative bg-black">
           {isVideo(typeCode) ? (
             <video
-              src={getAssetUrl(entry.fichier_media)}
               className="w-full h-full object-cover"
               onMouseOver={e => (e.target as HTMLVideoElement).play()}
               onMouseOut={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
               muted playsInline preload="metadata"
-            />
+            >
+              <source
+                src={getAssetUrl(entry.fichier_media)}
+                type={directusVideoMimeHint(entry.fichier_media)}
+              />
+            </video>
           ) : isAudio(typeCode) ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 gap-3 p-4">
               <Mic className="h-12 w-12 text-primary/40" />
@@ -281,7 +397,7 @@ const RecueilCard = ({ entry }: { entry: RecueilRow }) => {
 // Main component
 // ---------------------------------------------------------------------------
 const RecueilMemoires = () => {
-  const { user, temoin } = useAuth();
+  const { user } = useAuth();
   const { entries, loading, refresh } = usePublicRecueil();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -313,8 +429,8 @@ const RecueilMemoires = () => {
               Un espace dédié à la préservation des récits familiaux. Écrits, photos, enregistrements audio et vidéos — laissez une trace indélébile pour les générations futures.
             </p>
             <div className="flex flex-wrap gap-4">
-              {user && temoin ? (
-                <AddRecueilDialog temoinId={temoin.id} onSuccess={refresh} />
+              {user ? (
+                <AddRecueilDialog contributor={user} onSuccess={refresh} />
               ) : (
                 <a href="/auth">
                   <Button className="rounded-full px-8 h-12 gap-2">
@@ -400,17 +516,21 @@ const RecueilMemoires = () => {
                 Aidez-nous à construire ce mémorial vivant pour les générations futures.
               </p>
               <div className="grid grid-cols-2 gap-4 mb-8">
-                {TYPE_OPTIONS.map(t => (
-                  <div key={t.id} className="flex items-center gap-2 text-sm text-foreground/80">
+                {RECUEIL_TYPE_ORDER.map((code) => {
+                  const Icon = TYPE_ICON_BY_CODE[code];
+                  const label = TYPE_LABEL_FALLBACK[code] ?? code;
+                  return (
+                  <div key={code} className="flex items-center gap-2 text-sm text-foreground/80">
                     <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <t.icon className="h-4 w-4 text-primary" />
+                      <Icon className="h-4 w-4 text-primary" />
                     </div>
-                    {t.label}
+                    {label}
                   </div>
-                ))}
+                  );
+                })}
               </div>
-              {user && temoin ? (
-                <AddRecueilDialog temoinId={temoin.id} onSuccess={refresh} />
+              {user ? (
+                <AddRecueilDialog contributor={user} onSuccess={refresh} />
               ) : (
                 <a href="/auth">
                   <Button className="w-full md:w-auto px-10 h-12 rounded-full">Déposer un témoignage</Button>

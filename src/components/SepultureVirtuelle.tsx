@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Flame, Loader2, Plus, Lock, Heart } from "lucide-react";
 import { toast } from "sonner";
+import { notifyAdminsOnCreate, notifyAdminsOnUpdate } from "@/services/notificationService";
 
 interface SepultureVirtuelleProps {
   victime: VictimeRow;
@@ -34,9 +35,9 @@ const SEPULTURE_OPTIONS: { value: TypeSepulture; label: string; emoji: string }[
 ];
 
 export const SepultureVirtuelle = ({ victime }: SepultureVirtuelleProps) => {
-  const { user, temoin } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const { sepulture, loading, error, refresh } = useSepulture(victime.id);
+  const { sepulture, sepulturePendingValidation, loading, error, refresh } = useSepulture(victime.id);
   const [createOpen, setCreateOpen] = useState(false);
   const [lightingCandle, setLightingCandle] = useState(false);
 
@@ -59,6 +60,14 @@ export const SepultureVirtuelle = ({ victime }: SepultureVirtuelleProps) => {
       );
       toast.success("Une bougie a été allumée en mémoire de " + victime.prenom + " " + victime.nom);
       refresh();
+      if (user) {
+        await notifyAdminsOnUpdate(
+          "mmrl_sepultures",
+          sepulture.id,
+          `Compteur de bougies · ${victime.prenom} ${victime.nom}`,
+          user as any
+        );
+      }
     } catch (err: any) {
       console.error("[Sepulture] light candle error:", err);
       toast.error("Impossible d'allumer la bougie pour le moment.");
@@ -96,7 +105,16 @@ export const SepultureVirtuelle = ({ victime }: SepultureVirtuelleProps) => {
         </h2>
 
         {!sepulture ? (
-          <EmptySepulture onCreate={handleCreateClick} connected={!!user} />
+          sepulturePendingValidation ? (
+            <div className="text-center py-12 rounded-2xl border border-yellow-400/50 bg-yellow-50/40 dark:bg-yellow-950/20 px-6">
+              <p className="text-foreground font-medium mb-2">Sépulture en cours de validation</p>
+              <p className="text-sm text-muted-foreground">
+                Une sépulture virtuelle a été proposée pour cette personne. Elle sera visible ici après validation par l&apos;équipe.
+              </p>
+            </div>
+          ) : (
+            <EmptySepulture onCreate={handleCreateClick} connected={!!user} />
+          )
         ) : (
           <SepultureView
             sepulture={sepulture}
@@ -111,7 +129,7 @@ export const SepultureVirtuelle = ({ victime }: SepultureVirtuelleProps) => {
         open={createOpen}
         onOpenChange={setCreateOpen}
         victime={victime}
-        temoinId={temoin?.id ?? null}
+        contributor={user}
         onSuccess={() => { setCreateOpen(false); refresh(); }}
       />
     </section>
@@ -219,11 +237,11 @@ interface CreateSepultureDialogProps {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   victime: VictimeRow;
-  temoinId: number | null;
+  contributor: { id: string; first_name?: string; last_name?: string; role?: string | { id: string } } | null;
   onSuccess: () => void;
 }
 
-const CreateSepultureDialog = ({ open, onOpenChange, victime, temoinId, onSuccess }: CreateSepultureDialogProps) => {
+const CreateSepultureDialog = ({ open, onOpenChange, victime, contributor, onSuccess }: CreateSepultureDialogProps) => {
   const [typeSepulture, setTypeSepulture] = useState<TypeSepulture>("stupa");
   const [epitaphe, setEpitaphe] = useState("");
   const [message, setMessage] = useState("");
@@ -239,10 +257,10 @@ const CreateSepultureDialog = ({ open, onOpenChange, victime, temoinId, onSucces
     e.preventDefault();
     setSubmitting(true);
     try {
-      await directus.request(
+      const res = await directus.request(
         createItem("mmrl_sepultures" as any, {
           victime_id: victime.id,
-          auteur_temoin_id: temoinId,
+          auteur_user_id: contributor?.id ?? null,
           type_sepulture: typeSepulture,
           epitaphe: epitaphe.trim() || null,
           message: message.trim() || null,
@@ -250,6 +268,14 @@ const CreateSepultureDialog = ({ open, onOpenChange, victime, temoinId, onSucces
           statut_id: STATUT_ID.A_VERIFIER,
         } as any)
       );
+      if (contributor) {
+        await notifyAdminsOnCreate(
+          "mmrl_sepultures",
+          (res as { id: number }).id,
+          `Sépulture · ${victime.prenom} ${victime.nom}`,
+          contributor as any
+        );
+      }
       toast.success("La sépulture virtuelle a été créée. Elle sera publiée après vérification.");
       reset();
       onSuccess();

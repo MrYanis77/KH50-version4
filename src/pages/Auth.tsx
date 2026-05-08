@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Phone } from "lucide-react";
 import heroTexture from "@/assets/hero-texture.jpg";
 import { Link } from "react-router-dom";
 
@@ -18,6 +18,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, resetPassword } = useAuth();
@@ -36,7 +37,7 @@ const Auth = () => {
         const isAdminRole = role === "af76e557-fb34-4a8b-9900-a6b60121662c";
         navigate(isAdminRole ? "/admin" : "/memorial");
       } else if (mode === "signup") {
-        await signUp(email, password, displayName);
+        await signUp(email, password, displayName, phone);
         toast.success("Compte créé ! Bienvenue sur Fragmentis.");
         navigate("/memorial");
       } else {
@@ -128,6 +129,26 @@ const Auth = () => {
                       onChange={(e) => setDisplayName(e.target.value)}
                       className="pl-10"
                       maxLength={100}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {mode === "signup" && (
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-card-foreground">
+                    Téléphone <span className="text-muted-foreground font-normal">(optionnel)</span>
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+33 6 00 00 00 00"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="pl-10"
+                      maxLength={30}
                     />
                   </div>
                 </div>
