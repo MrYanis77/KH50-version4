@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { directus, directusAuth } from "@/integration/directus";
+import { directus } from "@/integration/directus";
 import { createItem, uploadFiles, readItems } from "@directus/sdk";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, PenLine, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import type { TypeFragmentRow } from "@/integration/directus-types";
 import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import {
+  fragmentFileMatchesFragmentType,
+  getAcceptAttributeForFragmentTypeCode,
+  getFragmentMediaHintFr,
+  resolveTypeCode,
+} from "@/utils/fragmentMedia";
 import { notifyAdminsOnCreate } from "@/services/notificationService";
 
 interface AddInformationDialogProps {
@@ -62,6 +69,11 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
     fetchData();
   }, []);
 
+  const fragmentTypeCode = useMemo(
+    () => resolveTypeCode(types as TypeFragmentRow[], fragmentForm.type_id),
+    [types, fragmentForm.type_id]
+  );
+
   const handleOpen = (open: boolean) => {
     if (open && !user) {
       navigate("/auth");
@@ -79,6 +91,12 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
     }
     if (!fragmentForm.description) {
       toast.error("Veuillez remplir la description.");
+      return;
+    }
+
+    const typeCodeForSubmit = resolveTypeCode(types as TypeFragmentRow[], fragmentForm.type_id);
+    if (mediaFile && !fragmentFileMatchesFragmentType(mediaFile, typeCodeForSubmit)) {
+      toast.error("Le fichier joint ne correspond pas au type choisi.");
       return;
     }
 
@@ -161,7 +179,21 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
               <div className="space-y-2">
                 <Label>Type d'information</Label>
-                <Select value={String(fragmentForm.type_id)} onValueChange={(v) => setFragmentForm(p => ({ ...p, type_id: Number(v) }))}>
+                <Select
+                  value={String(fragmentForm.type_id)}
+                  onValueChange={(v) => {
+                    const newTypeId = Number(v);
+                    const code = resolveTypeCode(types as TypeFragmentRow[], newTypeId);
+                    setFragmentForm((p) => ({ ...p, type_id: newTypeId }));
+                    setMediaFile((prev) => {
+                      if (prev && !fragmentFileMatchesFragmentType(prev, code)) {
+                        toast.info("Le fichier joint a été retiré — il ne correspond pas au nouveau type.");
+                        return null;
+                      }
+                      return prev;
+                    });
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {types.map(t => (
@@ -212,7 +244,21 @@ export const AddInformationDialog = ({ victimeId, victimeName, trigger, types: i
 
               <div className="space-y-2 pt-2">
                 <Label>Joindre un fichier (Optionnel)</Label>
-                <Input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+                <p className="text-xs text-muted-foreground">{getFragmentMediaHintFr(fragmentTypeCode)}</p>
+                <Input
+                  type="file"
+                  accept={getAcceptAttributeForFragmentTypeCode(fragmentTypeCode)}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    if (f && !fragmentFileMatchesFragmentType(f, fragmentTypeCode)) {
+                      toast.error("Ce fichier ne correspond pas au type d'information choisi.");
+                      e.target.value = "";
+                      setMediaFile(null);
+                      return;
+                    }
+                    setMediaFile(f);
+                  }}
+                />
               </div>
 
             </div>

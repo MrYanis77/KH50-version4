@@ -1,5 +1,5 @@
 import { createDirectus, rest, staticToken, authentication } from "@directus/sdk";
-import type { DirectusSchema, RecueilRow } from "./directus-types";
+import type { DirectusSchema, RecueilRow, TypeFragmentRow } from "./directus-types";
 import { TYPE_FRAGMENT_ID } from "./directus-types";
 
 const DIRECTUS_URL = import.meta.env.VITE_DIRECTUS_URL as string;
@@ -121,18 +121,41 @@ function normRecueilTypeId(entry: RecueilRow): number {
   return Number(t);
 }
 
-/** Détecte une vidéo même si `type` n’est pas expansé (type_id + MIME fichier). */
+/**
+ * Fragment de type après `fields: ["type_id.*"]` ou alias `entry.type`.
+ * L’API place l’expand sous `type_id`, pas forcément sous `type`.
+ */
+export function getExpandedRecueilType(entry: RecueilRow): Pick<TypeFragmentRow, "id" | "code" | "libelle"> | null {
+  const fromTypeId = entry.type_id;
+  if (
+    typeof fromTypeId === "object" &&
+    fromTypeId !== null &&
+    typeof (fromTypeId as TypeFragmentRow).code === "string"
+  ) {
+    const t = fromTypeId as TypeFragmentRow;
+    return { id: t.id, code: t.code, libelle: t.libelle };
+  }
+  const fromType = entry.type;
+  if (fromType?.code != null && fromType.code !== "") {
+    return { id: fromType.id, code: fromType.code, libelle: fromType.libelle };
+  }
+  return null;
+}
+
+export function getRecueilTypeCode(entry: RecueilRow): string {
+  return getExpandedRecueilType(entry)?.code ?? "";
+}
+
+/** Détecte une vidéo même si le type n’est pas résolu par code (MIME / id numérique). */
 export function recueilEntryIsVideo(entry: RecueilRow): boolean {
-  const type = entry.type as { code?: string } | undefined;
-  if (type?.code === "video") return true;
+  if (getRecueilTypeCode(entry) === "video") return true;
   if (normRecueilTypeId(entry) === TYPE_FRAGMENT_ID.VIDEO) return true;
   const m = getDirectusFileMime(entry.fichier_media);
   return Boolean(m?.startsWith("video/"));
 }
 
 export function recueilEntryIsAudio(entry: RecueilRow): boolean {
-  const type = entry.type as { code?: string } | undefined;
-  if (type?.code === "audio") return true;
+  if (getRecueilTypeCode(entry) === "audio") return true;
   if (normRecueilTypeId(entry) === TYPE_FRAGMENT_ID.AUDIO) return true;
   const m = getDirectusFileMime(entry.fichier_media);
   return Boolean(m?.startsWith("audio/"));

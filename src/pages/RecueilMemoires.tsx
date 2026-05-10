@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { directus, directusAuth, getAssetUrlWithViewerToken, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
+import { directus, directusAuth, getAssetUrlWithViewerToken, getExpandedRecueilType, getRecueilTypeCode, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
 import { createItem, uploadFiles, readItems } from "@directus/sdk";
 import { usePublicRecueil } from "@/hooks/useDirectus";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,13 @@ import { STATUT_ID } from "@/integration/directus-types";
 import { notifyAdminsOnCreate } from "@/services/notificationService";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { toast } from "sonner";
+import {
+  fragmentFileMatchesFragmentType,
+  getAcceptAttributeForFragmentTypeCode,
+  getFragmentMediaHintFr,
+  resolveTypeCode,
+} from "@/utils/fragmentMedia";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -135,6 +142,11 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
     };
   }, [open]);
 
+  const recueilSelectedTypeCode = useMemo(() => {
+    if (!typeId) return undefined;
+    return resolveTypeCode(recueilTypes, Number(typeId));
+  }, [recueilTypes, typeId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!typeId) {
@@ -143,6 +155,11 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
     }
     if (!contenu.trim() && !mediaFile) {
       toast.error("Veuillez saisir un contenu ou joindre un fichier.");
+      return;
+    }
+    const typeCodeSubmit = resolveTypeCode(recueilTypes, Number(typeId));
+    if (mediaFile && !fragmentFileMatchesFragmentType(mediaFile, typeCodeSubmit)) {
+      toast.error("Le fichier joint ne correspond pas au type choisi.");
       return;
     }
     setSaving(true);
@@ -230,7 +247,17 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
             )}
             <Select
               value={typeId}
-              onValueChange={setTypeId}
+              onValueChange={(v) => {
+                const code = resolveTypeCode(recueilTypes, Number(v));
+                setTypeId(v);
+                setMediaFile((prev) => {
+                  if (prev && !fragmentFileMatchesFragmentType(prev, code)) {
+                    toast.info("Le fichier joint a été retiré — il ne correspond pas au nouveau type.");
+                    return null;
+                  }
+                  return prev;
+                });
+              }}
               disabled={typesLoading || recueilTypes.length === 0}
             >
               <SelectTrigger>
@@ -274,13 +301,29 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
 
           {/* Fichier */}
           <div className="space-y-1.5">
-            <Label>Fichier joint (photo, vidéo, audio)</Label>
+            <Label>Fichier joint (optionnel)</Label>
+            <p className="text-xs text-muted-foreground">{getFragmentMediaHintFr(recueilSelectedTypeCode)}</p>
             <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
               <Upload className="h-6 w-6 text-muted-foreground mb-1" />
               <span className="text-sm text-muted-foreground">
                 {mediaFile ? mediaFile.name : "Cliquez pour choisir un fichier"}
               </span>
-              <input type="file" className="hidden" accept="image/*,video/*,audio/*" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+              <input
+                key={recueilSelectedTypeCode}
+                type="file"
+                className="hidden"
+                accept={getAcceptAttributeForFragmentTypeCode(recueilSelectedTypeCode)}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  if (f && !fragmentFileMatchesFragmentType(f, recueilSelectedTypeCode)) {
+                    toast.error("Ce fichier ne correspond pas au type de contenu choisi.");
+                    e.target.value = "";
+                    setMediaFile(null);
+                    return;
+                  }
+                  setMediaFile(f);
+                }}
+              />
             </label>
           </div>
 
@@ -318,8 +361,9 @@ const AddRecueilDialog = ({ contributor, onSuccess }: AddDialogProps) => {
 // RecueilCard
 // ---------------------------------------------------------------------------
 const RecueilCard = ({ entry, pendingValidation }: { entry: RecueilRow; pendingValidation?: boolean }) => {
-  const typeCode = (entry.type as any)?.code || "";
-  const typeLabel = (entry.type as any)?.libelle || getTypeLabel(typeCode);
+  const typeCode = getRecueilTypeCode(entry);
+  const typeFrag = getExpandedRecueilType(entry);
+  const typeLabel = typeFrag?.libelle || getTypeLabel(typeCode || undefined);
 
   return (
       <Card className="group h-full border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden hover:shadow-xl hover:shadow-primary/5 bg-card/50 backdrop-blur-sm flex flex-col cursor-pointer">
@@ -537,7 +581,7 @@ const RecueilMemoires = () => {
   const listLoading = visibilityMode === "private" ? privateLoading : loading;
 
   const filtered = displayEntries.filter(({ entry: e }) => {
-    const code = (e.type as any)?.code || "";
+    const code = getRecueilTypeCode(e);
     const matchSearch =
       (e.titre?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (e.contenu?.toLowerCase() || "").includes(searchTerm.toLowerCase());
@@ -634,7 +678,7 @@ const RecueilMemoires = () => {
             />
           </div>
 
-          <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={setActiveTab}>
+          <Tabs value={activeTab} className="w-full md:w-auto" onValueChange={setActiveTab}>
             <TabsList className="bg-muted/50 rounded-full p-1 flex-wrap">
               <TabsTrigger value="all" className="rounded-full px-4 text-xs">Tous</TabsTrigger>
               <TabsTrigger value="temoignage" className="rounded-full px-4 text-xs gap-1.5"><MessageSquare className="h-3 w-3" /> Témoignages</TabsTrigger>

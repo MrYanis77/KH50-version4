@@ -1,96 +1,53 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Book, Film, Mic, FileText, MapPin, Users, ExternalLink, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Book, Mic, FileText, MapPin, Users } from "lucide-react";
 import { ChronologieHistoriqueList } from "@/components/archives/ChronologieHistoriqueList";
+import {
+  ArchivesSectionTitle,
+} from "@/components/archives/archivePageUi";
+import {
+  ArchiveBibliographieList,
+  ArchiveDocumentsList,
+  ArchiveLieuxGrid,
+  ArchiveTransmissionGrid,
+  ArchiveTemoignagesGrid,
+} from "@/components/archives/ArchiveRubriqueGrids";
+import {
+  filterRubriqueItems,
+  usePublicArchivesChronologie,
+  usePublicArchivesRubriqueItems,
+} from "@/hooks/useArchivesSiteContent";
 
-/* ─── data ─── */
+const HOME_LIMITS = {
+  temoignages: 4,
+  lieux: 3,
+  documents: 4,
+  transmission: 4,
+  bibliographie: 4,
+} as const;
 
-const temoignages = [
-  { title: "Le dernier jour à Phnom Penh", desc: "Récit d'un survivant évacué de la capitale en avril 1975.", type: "text" as const, year: 1975 },
-  { title: "Voix de Battambang", desc: "Témoignage audio recueilli auprès d'une famille de riziculteurs.", type: "podcast" as const, year: 1978 },
-  { title: "Les enfants du camp", desc: "Documentaire sur les jeunes survivants des camps de travail.", type: "video" as const, year: 2004 },
-  { title: "Mémoire d'une mère", desc: "Lettres retrouvées d'une mère à ses enfants disparus.", type: "text" as const, year: 1976 },
-];
-
-const lieux = [
-  { name: "Tuol Sleng (S-21)", desc: "Ancien lycée transformé en centre de détention et de torture par les Khmers rouges.", photo: "https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=600&q=80" },
-  { name: "Choeung Ek", desc: "Principal site d'exécution du régime, aujourd'hui mémorial et musée.", photo: "https://images.unsplash.com/photo-1540611025311-01df3cef54b5?w=600&q=80" },
-  { name: "Phnom Penh", desc: "Capitale vidée de ses habitants le 17 avril 1975, symbole de l'exode forcé.", photo: "https://images.unsplash.com/photo-1575881875475-31023242e3f9?w=600&q=80" },
-];
-
-const documents = [
-  { title: "Registre administratif S-21", year: 1977, source: "Archives nationales du Cambodge" },
-  { title: "Lettres confisquées", year: 1976, source: "Musée Tuol Sleng" },
-  { title: "Photographies d'identité", year: 1978, source: "Documentation Center of Cambodia" },
-  { title: "Cartes des fosses communes", year: 1980, source: "Yale Cambodian Genocide Program" },
-];
-
-const transmission = [
-  { title: "Fragmentis Vitae Asia", desc: "Projet numérique de mémoire collective dédié aux vies disparues." },
-  { title: "Programme éducatif ECCC", desc: "Initiative pédagogique autour des tribunaux khmers rouges." },
-  { title: "Mémoire de la diaspora", desc: "Recueil de témoignages au sein de la communauté cambodgienne en France." },
-  { title: "Exposition itinérante", desc: "Parcours muséal présentant les traces matérielles du génocide." },
-];
-
-const bibliographie = [
-  { title: "D'abord, ils ont tué mon père", author: "Loung Ung", year: 2000, link: "#" },
-  { title: "L'Élimination", author: "Rithy Panh", year: 2012, link: "#" },
-  { title: "Survival in the Killing Fields", author: "Haing Ngor", year: 1987, link: "#" },
-  { title: "The Gate", author: "François Bizot", year: 2003, link: "#" },
-];
-
-/* ─── helpers ─── */
-
-const typeIcon = (type: "text" | "video" | "podcast") => {
-  switch (type) {
-    case "video": return <Film size={14} />;
-    case "podcast": return <Mic size={14} />;
-    default: return <Book size={14} />;
-  }
-};
-
-const typeLabel = (type: "text" | "video" | "podcast") => {
-  switch (type) {
-    case "video": return "Voir";
-    case "podcast": return "Écouter";
-    default: return "Lire";
-  }
-};
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.08, duration: 0.5, ease: "easeOut" as const },
-  }),
-};
-
-const SectionTitle = ({ children, icon, onViewAll }: { children: React.ReactNode; icon: React.ReactNode; onViewAll?: () => void; }) => (
-  <div className="flex items-center justify-between mb-8">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">{icon}</div>
-      <h2 className="font-display text-2xl md:text-3xl text-foreground">{children}</h2>
-    </div>
-    {onViewAll && (
-      <Button variant="ghost" size="sm" onClick={onViewAll} className="text-accent hover:text-foreground gap-1.5">
-        Tout voir <ArrowRight size={14} />
-      </Button>
-    )}
-  </div>
-);
+function SectionSkeleton() {
+  return <div className="h-48 rounded-xl bg-muted/50 animate-pulse" />;
+}
 
 const Archives = () => {
   const navigate = useNavigate();
+  const { items, loading: rubLoading } = usePublicArchivesRubriqueItems();
+  const chronoHook = usePublicArchivesChronologie();
+
+  const temoignagesItems = filterRubriqueItems(items, "temoignages");
+  const lieuxItems = filterRubriqueItems(items, "lieux");
+  const documentsItems = filterRubriqueItems(items, "documents");
+  const transmissionItems = filterRubriqueItems(items, "transmission");
+  const bibliographieItems = filterRubriqueItems(items, "bibliographie");
+
   return (
     <div className="min-h-screen bg-background">
-      
 
       {/* Hero */}
       <section className="relative py-20 md:py-28 overflow-hidden">
         <div className="absolute inset-0 fragmentis-diagonal pointer-events-none" />
         <div className="container mx-auto px-4 text-center relative z-10">
-          {/* decorative accent */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -121,183 +78,85 @@ const Archives = () => {
         </div>
       </section>
 
-      {/* Sections */}
       <div className="container mx-auto px-4 pb-24 space-y-20">
 
-        {/* 1 · Témoignages */}
         <section>
-          <SectionTitle icon={<Mic size={20} />} onViewAll={() => navigate("/archives/temoignages")}>Témoignages</SectionTitle>
+          <ArchivesSectionTitle icon={<Mic size={20} />} onViewAll={() => navigate("/archives/temoignages")}>
+            Témoignages
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-xl">
             Récits de survivants, mémoires transmises et voix préservées.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {temoignages.map((t, i) => (
-              <motion.article
-                key={t.title}
-                custom={i}
-                variants={fadeUp}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
-              >
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-                  <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
-                    {typeIcon(t.type)} {t.type}
-                  </span>
-                  <span>{t.year}</span>
-                </div>
-                <h3 className="font-display text-base text-foreground mb-2">{t.title}</h3>
-                <p className="font-body text-sm text-muted-foreground flex-1 leading-relaxed">{t.desc}</p>
-                <button className="mt-4 self-start text-sm font-body font-semibold text-accent hover:text-foreground transition-colors flex items-center gap-1">
-                  {typeLabel(t.type)} <ExternalLink size={12} />
-                </button>
-              </motion.article>
-            ))}
-          </div>
+          {rubLoading ? (
+            <SectionSkeleton />
+          ) : (
+            <ArchiveTemoignagesGrid items={temoignagesItems} maxItems={HOME_LIMITS.temoignages} />
+          )}
         </section>
 
-        {/* 2 · Chronologie historique */}
         <section>
-          <SectionTitle icon={<Book size={20} />} onViewAll={() => navigate("/archives/chronologie")}>Chronologie historique</SectionTitle>
+          <ArchivesSectionTitle icon={<Book size={20} />} onViewAll={() => navigate("/archives/chronologie")}>
+            Chronologie historique
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-2xl">
             De la colonisation à la mémoire diasporique : périodes clés, génocide, exil et transmission.
           </p>
-          <ChronologieHistoriqueList />
+          <ChronologieHistoriqueList
+            sectionsFromApi={chronoHook.sections}
+            apiLoading={chronoHook.loading}
+          />
         </section>
 
-        {/* 3 · Lieux de mémoire */}
         <section>
-          <SectionTitle icon={<MapPin size={20} />} onViewAll={() => navigate("/archives/lieux")}>Lieux de mémoire</SectionTitle>
+          <ArchivesSectionTitle icon={<MapPin size={20} />} onViewAll={() => navigate("/archives/lieux")}>
+            Lieux de mémoire
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-xl">
             Lieux historiques liés au génocide et à la mémoire collective.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lieux.map((l, i) => (
-              <motion.article
-                key={l.name}
-                custom={i}
-                variants={fadeUp}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="bg-card rounded-xl overflow-hidden border border-border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group"
-              >
-                <div className="aspect-[16/10] overflow-hidden">
-                  <img
-                    src={l.photo}
-                    alt={l.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="p-5">
-                  <h3 className="font-display text-lg text-foreground mb-2">{l.name}</h3>
-                  <p className="font-body text-sm text-muted-foreground leading-relaxed mb-4">{l.desc}</p>
-                  <button className="text-sm font-body font-semibold text-accent hover:text-foreground transition-colors flex items-center gap-1">
-                    Explorer <ExternalLink size={12} />
-                  </button>
-                </div>
-              </motion.article>
-            ))}
-          </div>
+          {rubLoading ? <SectionSkeleton /> : <ArchiveLieuxGrid items={lieuxItems} maxItems={HOME_LIMITS.lieux} />}
         </section>
 
-        {/* 4 · Archives et documents */}
         <section>
-          <SectionTitle icon={<FileText size={20} />} onViewAll={() => navigate("/archives/documents")}>Archives et documents</SectionTitle>
+          <ArchivesSectionTitle icon={<FileText size={20} />} onViewAll={() => navigate("/archives/documents")}>
+            Archives et documents
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-xl">
             Documents historiques, registres et photographies d'archives.
           </p>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {documents.map((d, i) => (
-              <motion.div
-                key={d.title}
-                custom={i}
-                variants={fadeUp}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="flex items-center gap-4 bg-card rounded-xl p-5 border border-border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
-              >
-                <div className="w-10 h-10 rounded-lg bg-secondary/60 flex items-center justify-center shrink-0">
-                  <FileText size={18} className="text-brand-brown" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-display text-base text-foreground truncate">{d.title}</h3>
-                  <p className="font-body text-xs text-muted-foreground">{d.year} · {d.source}</p>
-                </div>
-                <button className="text-sm font-body font-semibold text-accent hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1">
-                  Voir <ExternalLink size={12} />
-                </button>
-              </motion.div>
-            ))}
-          </div>
+          {rubLoading ? <SectionSkeleton /> : <ArchiveDocumentsList items={documentsItems} maxItems={HOME_LIMITS.documents} />}
         </section>
 
-        {/* 5 · Transmission et mémoire */}
         <section>
-          <SectionTitle icon={<Users size={20} />} onViewAll={() => navigate("/archives/transmission")}>Transmission et mémoire</SectionTitle>
+          <ArchivesSectionTitle icon={<Users size={20} />} onViewAll={() => navigate("/archives/transmission")}>
+            Transmission et mémoire
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-xl">
             Projets et initiatives dédiés à la préservation de la mémoire.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {transmission.map((t, i) => (
-              <motion.article
-                key={t.title}
-                custom={i}
-                variants={fadeUp}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
-              >
-                <h3 className="font-display text-base text-foreground mb-2">{t.title}</h3>
-                <p className="font-body text-sm text-muted-foreground leading-relaxed">{t.desc}</p>
-              </motion.article>
-            ))}
-          </div>
+          {rubLoading ? (
+            <SectionSkeleton />
+          ) : (
+            <ArchiveTransmissionGrid items={transmissionItems} maxItems={HOME_LIMITS.transmission} />
+          )}
         </section>
 
-        {/* 6 · Bibliographie et ressources */}
         <section>
-          <SectionTitle icon={<Book size={20} />} onViewAll={() => navigate("/archives/bibliographie")}>Bibliographie et ressources</SectionTitle>
+          <ArchivesSectionTitle icon={<Book size={20} />} onViewAll={() => navigate("/archives/bibliographie")}>
+            Bibliographie et ressources
+          </ArchivesSectionTitle>
           <p className="font-body text-muted-foreground mb-8 max-w-xl">
             Ouvrages, films et travaux académiques recommandés.
           </p>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {bibliographie.map((b, i) => (
-              <motion.div
-                key={b.title}
-                custom={i}
-                variants={fadeUp}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                className="flex items-center gap-4 bg-card rounded-xl p-5 border border-border hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
-              >
-                <div className="w-10 h-10 rounded-lg bg-secondary/60 flex items-center justify-center shrink-0">
-                  <Book size={18} className="text-brand-brown" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-display text-base text-foreground truncate">{b.title}</h3>
-                  <p className="font-body text-xs text-muted-foreground">{b.author} · {b.year}</p>
-                </div>
-                <a
-                  href={b.link}
-                  className="text-sm font-body font-semibold text-accent hover:text-foreground transition-colors whitespace-nowrap flex items-center gap-1"
-                  aria-label={`Voir ${b.title}`}
-                >
-                  Voir <ExternalLink size={12} />
-                </a>
-              </motion.div>
-            ))}
-          </div>
+          {rubLoading ? (
+            <SectionSkeleton />
+          ) : (
+            <ArchiveBibliographieList items={bibliographieItems} maxItems={HOME_LIMITS.bibliographie} />
+          )}
         </section>
 
       </div>
 
-      {/* Footer accent */}
       <footer className="border-t border-border py-10 text-center">
         <div className="flex items-center justify-center gap-3 mb-4">
           <div className="w-6 h-px bg-brand-burnt/40" style={{ transform: "rotate(30.54deg)" }} aria-hidden="true" />

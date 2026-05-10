@@ -20,7 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getAssetUrlWithViewerToken, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
+import { getAssetUrlWithViewerToken, getExpandedRecueilType, getRecueilTypeCode, recueilEntryIsVideo, recueilEntryIsAudio } from "@/integration/directus";
 import type { RecueilRow, TypeFragmentCode } from "@/integration/directus-types";
 import { STATUT_ID } from "@/integration/directus-types";
 import { format } from "date-fns";
@@ -54,14 +54,13 @@ function statutNum(row: RecueilRow): number {
 }
 
 function typeCode(row: RecueilRow): string {
-  const t = row.type as { code?: string } | undefined;
-  return t?.code || "";
+  return getRecueilTypeCode(row);
 }
 
 function typeLabel(row: RecueilRow): string {
-  const t = row.type as { libelle?: string; code?: string } | undefined;
+  const t = getExpandedRecueilType(row);
   if (t?.libelle) return t.libelle;
-  const c = t?.code as TypeFragmentCode | undefined;
+  const c = getRecueilTypeCode(row) as TypeFragmentCode | "";
   return (c && TYPE_LABEL_FALLBACK[c]) || "Contribution";
 }
 

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { CHRONOLOGIE_SECTIONS } from "@/data/archivesChronologie";
+import { CHRONOLOGIE_SECTIONS, type ChronologieSection } from "@/data/archivesChronologie";
+import { cn } from "@/lib/utils";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -10,13 +11,35 @@ const fadeUp = {
   }),
 };
 
+type Props = {
+  className?: string;
+  /** Données depuis Directus ; si vide après chargement, repli sur les sections statiques du dépôt */
+  sectionsFromApi?: ChronologieSection[];
+  apiLoading?: boolean;
+};
+
 /** Frise chronologique partagée entre la page Archives et /archives/chronologie */
-export function ChronologieHistoriqueList({ className }: { className?: string }) {
+export function ChronologieHistoriqueList({ className, sectionsFromApi, apiLoading }: Props) {
+  const useApi =
+    !apiLoading && Array.isArray(sectionsFromApi) && sectionsFromApi.length > 0;
+  const sections: ChronologieSection[] = useApi ? sectionsFromApi! : CHRONOLOGIE_SECTIONS;
+
+  if (apiLoading) {
+    return (
+      <div className={cn("space-y-10", className)}>
+        <div className="h-8 w-48 rounded-md bg-muted animate-pulse" />
+        <div className="h-32 max-w-2xl rounded-lg bg-muted animate-pulse" />
+        <div className="h-8 w-56 rounded-md bg-muted animate-pulse" />
+        <div className="h-24 max-w-2xl rounded-lg bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
   let globalIndex = 0;
 
   return (
     <div className={className}>
-      {CHRONOLOGIE_SECTIONS.map((section) => (
+      {sections.map((section) => (
         <div key={section.title} className="mb-12 last:mb-0">
           <h3 className="font-display text-xl md:text-2xl text-foreground mb-6 pb-2 border-b border-border/70">
             {section.title}

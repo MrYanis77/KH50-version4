@@ -17,6 +17,9 @@ export interface DirectusSchema {
   mmrl_relations_familiales: RelationFamilialeRow[];
   mmrl_sepultures: SepultureRow[];
   mmrl_recueil: RecueilRow[];
+  mmrl_archives_rubrique_item: ArchivesRubriqueItemRow[];
+  mmrl_archives_chronologie_section: ArchivesChronologieSectionRow[];
+  mmrl_archives_chronologie_ligne: ArchivesChronologieLigneRow[];
   directus_files: DirectusFilesRow[];
   directus_users: DirectusUsersRow[];
   mmrl_notifications: NotificationRow[];
@@ -197,8 +200,8 @@ export interface RecueilRow {
   /** FK → directus_users.id (CHAR 36) */
   auteur_user_id: string;
   auteur_user?: DirectusUsersRow;
-  /** FK → mmrl_type_fragment.id */
-  type_id: number;
+  /** FK mmrl_type_fragment — nombre seul ou objet si expand `type_id.*` */
+  type_id: number | TypeFragmentRow;
   type?: TypeFragmentRow;
   titre?: string | null;
   contenu?: string | null;
@@ -212,6 +215,65 @@ export interface RecueilRow {
   date_creation?: string;
   date_modification?: string;
   deleted_at?: string | null;
+}
+
+/** Rubriques de la vitrine Archives (pages /archives…) */
+export type ArchivesRubriqueCategorie =
+  | "temoignages"
+  | "lieux"
+  | "documents"
+  | "transmission"
+  | "bibliographie";
+
+/** type_contenu pour la rubrique témoignages (icônes Lire/Voir/Écouter) */
+export type ArchivesTypeContenu = "text" | "video" | "podcast";
+
+/** mmrl_archives_rubrique_item — champs système comme en base Directus */
+export interface ArchivesRubriqueItemRow {
+  id: number;
+  categorie: ArchivesRubriqueCategorie;
+  titre: string;
+  description?: string | null;
+  type_contenu?: ArchivesTypeContenu | null;
+  annee?: number | null;
+  source_attribution?: string | null;
+  auteur_reference?: string | null;
+  lien_url?: string | null;
+  /** FK → directus_files.id */
+  image_couverture?: string | DirectusFilesRow | null;
+  status: string;
+  sort: number | null;
+  user_created?: string | null;
+  date_created?: string;
+  user_updated?: string | null;
+  date_updated?: string | null;
+}
+
+/** mmrl_archives_chronologie_section */
+export interface ArchivesChronologieSectionRow {
+  id: number;
+  titre: string;
+  status: string;
+  sort: number | null;
+  user_created?: string | null;
+  date_created?: string;
+  user_updated?: string | null;
+  date_updated?: string | null;
+}
+
+/** mmrl_archives_chronologie_ligne */
+export interface ArchivesChronologieLigneRow {
+  id: number;
+  /** FK → mmrl_archives_chronologie_section.id */
+  section_id: number;
+  annee_libelle: string;
+  description: string;
+  status: string;
+  sort: number | null;
+  user_created?: string | null;
+  date_created?: string;
+  user_updated?: string | null;
+  date_updated?: string | null;
 }
 
 /**
@@ -287,6 +349,26 @@ export type MmrlRecueilInsert = Omit<
   | "date_creation"
   | "date_modification"
   | "deleted_at"
+>;
+
+export type MmrlArchivesRubriqueItemInsert = Omit<
+  ArchivesRubriqueItemRow,
+  | "id"
+  | "image_couverture"
+  | "date_created"
+  | "date_updated"
+  | "user_created"
+  | "user_updated"
+> & { image_couverture?: string | null };
+
+export type MmrlArchivesChronologieSectionInsert = Omit<
+  ArchivesChronologieSectionRow,
+  "id" | "date_created" | "date_updated" | "user_created" | "user_updated"
+>;
+
+export type MmrlArchivesChronologieLigneInsert = Omit<
+  ArchivesChronologieLigneRow,
+  "id" | "date_created" | "date_updated" | "user_created" | "user_updated"
 >;
 
 export type MmrlNotificationInsert = Omit<NotificationRow, "id" | "date_creation">;

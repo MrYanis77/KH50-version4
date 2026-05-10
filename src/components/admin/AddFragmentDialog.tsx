@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { directus } from "@/integration/directus";
 import { createItem, uploadFiles } from "@directus/sdk";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -9,7 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, Plus } from "lucide-react";
-import { STATUT_ID, TYPE_FRAGMENT_ID } from "@/integration/directus-types";
+import type { TypeFragmentRow } from "@/integration/directus-types";
+import {
+  fragmentFileMatchesFragmentType,
+  getAcceptAttributeForFragmentTypeCode,
+  getFragmentMediaHintFr,
+  resolveTypeCode,
+} from "@/utils/fragmentMedia";
 import { notifyAdminsOnCreate } from "@/services/notificationService";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -35,9 +41,20 @@ export function AddFragmentDialog({ victimeId, auteurUserId, onSuccess, qualiteS
     statut_id: qualiteStatuts[0]?.id || 2,
   });
 
+  const fragmentTypeCode = useMemo(
+    () => resolveTypeCode(typeFragments as TypeFragmentRow[], form.type_id),
+    [typeFragments, form.type_id]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.description) return toast.error("Description requise");
+
+    const codeForSubmit = resolveTypeCode(typeFragments as TypeFragmentRow[], form.type_id);
+    if (mediaFile && !fragmentFileMatchesFragmentType(mediaFile, codeForSubmit)) {
+      toast.error("Le fichier joint ne correspond pas au type choisi.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -102,7 +119,21 @@ export function AddFragmentDialog({ victimeId, auteurUserId, onSuccess, qualiteS
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={String(form.type_id)} onValueChange={v => setForm(p => ({ ...p, type_id: Number(v) }))}>
+              <Select
+                value={String(form.type_id)}
+                onValueChange={(v) => {
+                  const newTypeId = Number(v);
+                  const code = resolveTypeCode(typeFragments as TypeFragmentRow[], newTypeId);
+                  setForm((p) => ({ ...p, type_id: newTypeId }));
+                  setMediaFile((prev) => {
+                    if (prev && !fragmentFileMatchesFragmentType(prev, code)) {
+                      toast.info("Le fichier joint a été retiré — il ne correspond pas au nouveau type.");
+                      return null;
+                    }
+                    return prev;
+                  });
+                }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {typeFragments.map(t => (
@@ -141,7 +172,21 @@ export function AddFragmentDialog({ victimeId, auteurUserId, onSuccess, qualiteS
 
           <div className="space-y-2">
             <Label>Fichier</Label>
-            <Input type="file" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+            <p className="text-xs text-muted-foreground">{getFragmentMediaHintFr(fragmentTypeCode)}</p>
+            <Input
+              type="file"
+              accept={getAcceptAttributeForFragmentTypeCode(fragmentTypeCode)}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                if (f && !fragmentFileMatchesFragmentType(f, fragmentTypeCode)) {
+                  toast.error("Ce fichier ne correspond pas au type choisi.");
+                  e.target.value = "";
+                  setMediaFile(null);
+                  return;
+                }
+                setMediaFile(f);
+              }}
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
