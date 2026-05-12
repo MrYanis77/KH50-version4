@@ -1,16 +1,39 @@
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import stupaImage from "@/assets/stupa-hero.jpg";
+import stupaVideo from "@/assets/stupa.mp4";
 import FragmentisCTA from "./FragmentisCTA";
 
 interface HomeHeroStupaProps {
   onEnter: () => void;
   phase: "idle" | "awakening" | "opening" | "moving" | "dissolving" | "done";
+  /** Called once the video file duration is known (for sequencing). */
+  onVideoDurationKnown?: (durationMs: number) => void;
+  /** Fires when playback reaches the end of the file (full duration). */
+  onVideoEnded?: () => void;
 }
 
-const HomeHeroStupa = ({ onEnter, phase }: HomeHeroStupaProps) => {
+const HomeHeroStupa = ({ onEnter, phase, onVideoDurationKnown, onVideoEnded }: HomeHeroStupaProps) => {
   const prefersReduced = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
   const isIdle = phase === "idle";
   const isAnimating = !isIdle && phase !== "done";
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setRevealed(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (phase === "idle") {
+      el.pause();
+      el.currentTime = 0;
+      return;
+    }
+    void el.play().catch(() => {});
+  }, [phase]);
 
   // Compute dynamic styles based on phase
   const getImageStyle = () => {
@@ -36,22 +59,6 @@ const HomeHeroStupa = ({ onEnter, phase }: HomeHeroStupaProps) => {
     }
   };
 
-  const getOverlayOpacity = () => {
-    switch (phase) {
-      case "awakening":
-        return 0.15;
-      case "opening":
-        return 0.1;
-      case "moving":
-        return 0.05;
-      case "dissolving":
-      case "done":
-        return 0;
-      default:
-        return 0.25;
-    }
-  };
-
   const getGlowOpacity = () => {
     switch (phase) {
       case "awakening":
@@ -67,28 +74,34 @@ const HomeHeroStupa = ({ onEnter, phase }: HomeHeroStupaProps) => {
 
   return (
     <section
-      className="relative w-full h-screen overflow-hidden flex items-center justify-center"
+      className="relative flex min-h-[100dvh] w-full max-w-none items-center justify-center overflow-hidden"
       aria-label="Sanctuaire mémoriel"
     >
-      {/* Background image */}
+      {/* Background video */}
       <motion.div
-        className="absolute inset-0"
-        animate={getImageStyle()}
+        className="absolute inset-0 overflow-hidden"
+        animate={{ ...getImageStyle(), opacity: revealed ? (getImageStyle().opacity ?? 1) : 0 }}
         transition={{ duration: prefersReduced ? 0.5 : 2.2, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        <img
-          src={stupaImage}
-          alt="Stupa mémoriel sacré"
-          className="w-full h-full object-cover"
+        <video
+          ref={videoRef}
+          src={stupaVideo}
+          className="pointer-events-none absolute inset-0 w-full h-full object-cover object-[center_15%]"
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden
+          onLoadedMetadata={(e) => {
+            const { duration } = e.currentTarget;
+            if (Number.isFinite(duration) && duration > 0) {
+              onVideoDurationKnown?.(duration * 1000);
+            }
+          }}
+          onEnded={() => {
+            onVideoEnded?.();
+          }}
         />
       </motion.div>
-
-      {/* Mist / atmospheric overlay */}
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-t from-background/40 via-transparent to-background/30"
-        animate={{ opacity: getOverlayOpacity() }}
-        transition={{ duration: 1.5 }}
-      />
 
       {/* Diagonal Fragmentis motif overlay */}
       <div className="absolute inset-0 fragmentis-diagonal pointer-events-none" />
@@ -127,9 +140,6 @@ const HomeHeroStupa = ({ onEnter, phase }: HomeHeroStupaProps) => {
           ))}
         </div>
       )}
-
-      {/* Bottom gradient */}
-      <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-background to-transparent pointer-events-none" />
 
       {/* CTA button */}
       <div className="relative z-10 mt-[30vh]">

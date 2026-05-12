@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import Archives from "./pages/Archives.tsx";
 import ArchiveCategory from "./pages/ArchiveCategory.tsx";
 import About from "./pages/About.tsx";
@@ -19,6 +20,8 @@ import RecueilMemoires from "./pages/RecueilMemoires.tsx";
 import RecueilDetail from "./pages/RecueilDetail.tsx";
 import Profile from "./pages/Profile.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import LegalNotice from "./pages/LegalNotice.tsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.tsx";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +48,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => (
     <main className="flex-grow">
       {children}
     </main>
+    <Footer />
   </div>
 );
 
@@ -61,6 +65,8 @@ const App = () => (
             <Route path="/archives" element={<MainLayout><Archives /></MainLayout>} />
             <Route path="/archives/:category" element={<MainLayout><ArchiveCategory /></MainLayout>} />
             <Route path="/about" element={<MainLayout><About /></MainLayout>} />
+            <Route path="/mentions-legales" element={<MainLayout><LegalNotice /></MainLayout>} />
+            <Route path="/politique-confidentialite" element={<MainLayout><PrivacyPolicy /></MainLayout>} />
             <Route path="/auth" element={<MainLayout><Auth /></MainLayout>} />
             <Route path="/reset-password" element={<MainLayout><ResetPassword /></MainLayout>} />
             <Route path="/memorial/:id" element={<MainLayout><MemorialProfile /></MainLayout>} />

@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 
+const linkClass =
+  "block px-4 py-2.5 text-sm font-medium font-body text-foreground hover:text-brand-sage hover:bg-muted rounded-md transition-colors";
+
 const links = [
   { label: "Se connecter", href: "/auth" },
-  { label: "Accueil", href: "https://www.fragmentis-vitae.org/" },
-  { label: "À propos", href: "https://www.fragmentis-vitae.org/porteurs-projet/" },
+  { label: "Accueil", href: "/recueil" },
+  { label: "À propos", href: "/about" },
 ];
 
 const FragmentisFloatingMenu = () => {
@@ -34,12 +38,15 @@ const FragmentisFloatingMenu = () => {
             <ul className="space-y-1">
               {links.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
-                    className="block px-4 py-2.5 text-sm font-medium font-body text-foreground hover:text-brand-sage hover:bg-muted rounded-md transition-colors"
-                  >
-                    {link.label}
-                  </a>
+                  {link.href.startsWith("http") ? (
+                    <a href={link.href} className={linkClass}>
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link to={link.href} onClick={() => setOpen(false)} className={linkClass}>
+                      {link.label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

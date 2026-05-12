@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemorialPersons } from "@/hooks/useDirectus";
 import AddVictimeDialog from "@/components/AddVictimeDialog";
 import { User, Search, MapPin, Clock, Briefcase, LogIn, LogOut } from "lucide-react";
+import MemorialCard from "@/components/MemorialCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import memorialConcept from "@/assets/memorial-concept.png";
@@ -124,34 +125,34 @@ const MemorialWall = () => {
                 <div className="w-16 h-px bg-accent/50 mx-auto mt-2" />
               </div>
 
-              {/* Name columns — Vietnam Memorial style */}
-              <div className="columns-2 sm:columns-3 md:columns-4 lg:columns-5 gap-0">
+              {/* Grille portraits + noms */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
                 <AnimatePresence>
                   {filteredPeople.map((person, index) => (
                     <motion.div
                       key={person.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.015 }}
-                      className="break-inside-avoid"
+                      transition={{ delay: index * 0.02 }}
+                      onMouseEnter={() => setHoveredPerson(person)}
+                      onMouseLeave={() => setHoveredPerson(null)}
+                      className={
+                        person.statut_id === 2
+                          ? "rounded-[16px] ring-2 ring-yellow-400/55 ring-offset-2 ring-offset-background"
+                          : ""
+                      }
                     >
-                      <Link
-                        to={`/memorial/${person.id}`}
-                        onMouseEnter={() => setHoveredPerson(person)}
-                        onMouseLeave={() => setHoveredPerson(null)}
-                        className={`group relative block px-2 py-1.5 text-sm font-mono tracking-wide transition-all duration-200 cursor-pointer rounded ${
-                          person.statut_id === 2
-                            ? 'text-yellow-300/80 hover:text-yellow-200 hover:bg-yellow-500/10'
-                            : 'text-foreground/80 hover:text-foreground hover:bg-accent/10'
-                        }`}
-                      >
-                        <span className="group-hover:underline underline-offset-2">
-                          {person.prenom} <span className="uppercase font-semibold">{person.nom}</span>
-                        </span>
-                        {person.statut_id === 2 && (
-                          <span className="ml-1 text-yellow-400/60 text-[10px]">◌</span>
-                        )}
-                      </Link>
+                      <MemorialCard
+                        id={person.id}
+                        firstName={person.prenom}
+                        lastName={person.nom}
+                        imageSrc={
+                          person.photo_principale
+                            ? getAssetUrl(person.photo_principale, "width=640&height=853&fit=cover")
+                            : ""
+                        }
+                        index={index}
+                      />
                     </motion.div>
                   ))}
                 </AnimatePresence>

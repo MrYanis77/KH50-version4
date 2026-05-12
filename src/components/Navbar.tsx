@@ -8,8 +8,8 @@ import { NavLink } from "@/components/NavLink";
 import { NotificationBell } from "@/components/NotificationBell";
 
 const navLinks = [
-  { label: "Recueil", href: "/recueil", end: false },
   { label: "Mur Virtuel", href: "/memorial", end: false },
+  { label: "Recueil", href: "/recueil", end: false },
   { label: "Archives", href: "/archives", end: false },
   { label: "À propos", href: "/about", end: false },
 ];

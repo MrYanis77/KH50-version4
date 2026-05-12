@@ -6,6 +6,7 @@ import { useStupaSequence, type StupaPhase } from "@/components/StupaOpeningSequ
 import ArchiveRegisterScene from "@/components/ArchiveRegisterScene";
 import FragmentisFloatingMenu from "@/components/FragmentisFloatingMenu";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import HeroSection from "@/components/HeroSection";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import MemorialCard from "@/components/MemorialCard";
@@ -27,6 +28,8 @@ const Index = () => {
     const [viewMode, setViewMode] = useState<"grid" | "cards" | "list">("grid");
     const [currentPage, setCurrentPage] = useState(1);
 
+    const [stupaVideoDurationMs, setStupaVideoDurationMs] = useState<number | null>(null);
+
     const handlePhaseChange = useCallback((newPhase: StupaPhase) => {
         setPhase(newPhase);
         if (newPhase === "done") {
@@ -34,14 +37,19 @@ const Index = () => {
         }
     }, []);
 
-    const { start: startSequence } = useStupaSequence({
+    const { start: startSequence, cancel: cancelStupaSequence } = useStupaSequence({
         onPhaseChange: handlePhaseChange,
         reducedMotion: prefersReduced ?? false,
     });
 
     const handleEnterStupa = useCallback(() => {
-        startSequence();
-    }, [startSequence]);
+        startSequence(stupaVideoDurationMs ?? undefined);
+    }, [startSequence, stupaVideoDurationMs]);
+
+    const handleStupaVideoEnded = useCallback(() => {
+        cancelStupaSequence();
+        handlePhaseChange("done");
+    }, [cancelStupaSequence, handlePhaseChange]);
 
     const handleExploreWall = useCallback(() => {
         navigate("/memorial");
@@ -84,9 +92,14 @@ const Index = () => {
     // Hero scene
     if (scene === "hero") {
         return (
-            <div className="min-h-screen bg-background">
+            <div className="relative min-h-[100dvh] w-full max-w-none overflow-x-hidden bg-background">
                 <FragmentisFloatingMenu />
-                <HomeHeroStupa onEnter={handleEnterStupa} phase={phase} />
+                <HomeHeroStupa
+                    onEnter={handleEnterStupa}
+                    phase={phase}
+                    onVideoDurationKnown={setStupaVideoDurationMs}
+                    onVideoEnded={handleStupaVideoEnded}
+                />
             </div>
         );
     }
@@ -140,6 +153,7 @@ const Index = () => {
                 onPageChange={setCurrentPage}
             />
 
+            <Footer />
         </div>
     );
 };

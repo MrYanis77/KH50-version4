@@ -7,6 +7,9 @@ interface UseStupaSequenceOptions {
   reducedMotion?: boolean;
 }
 
+/** Reference cinematic length (ms) used to scale phase timings to the real video duration. */
+const BASE_FULL_MS = 6200;
+
 /**
  * Custom hook that manages the stupa opening animation sequence.
  * Phases: idle → awakening → opening → moving → dissolving → done
@@ -19,45 +22,51 @@ export function useStupaSequence({ onPhaseChange, reducedMotion }: UseStupaSeque
     timeoutsRef.current = [];
   }, []);
 
-  const start = useCallback(() => {
-    clearAll();
+  const start = useCallback(
+    (fullSequenceMs?: number) => {
+      clearAll();
 
-    if (reducedMotion) {
-      // Simplified sequence for reduced motion
+      if (reducedMotion) {
+        // Simplified sequence for reduced motion
+        onPhaseChange("awakening");
+        const t1 = setTimeout(() => {
+          onPhaseChange("done");
+        }, 800);
+        timeoutsRef.current.push(t1);
+        return;
+      }
+
+      const D =
+        fullSequenceMs !== undefined && Number.isFinite(fullSequenceMs) && fullSequenceMs > 0
+          ? fullSequenceMs
+          : BASE_FULL_MS;
+
+      const scale = D / BASE_FULL_MS;
+
+      // Full cinematic sequence — intermediate phases stretch with the video length.
+      // Transition to "done" is driven by the video `ended` event so the file plays in full.
       onPhaseChange("awakening");
+
       const t1 = setTimeout(() => {
-        onPhaseChange("done");
-      }, 800);
-      timeoutsRef.current.push(t1);
-      return;
-    }
+        onPhaseChange("opening");
+      }, Math.round(1200 * scale));
 
-    // Full cinematic sequence
-    // Step 1: CTA fades (handled by parent removing CTA)
-    onPhaseChange("awakening");
+      const t2 = setTimeout(() => {
+        onPhaseChange("moving");
+      }, Math.round(2800 * scale));
 
-    const t1 = setTimeout(() => {
-      onPhaseChange("opening");
-    }, 1200);
+      const t3 = setTimeout(() => {
+        onPhaseChange("dissolving");
+      }, Math.round(4800 * scale));
 
-    const t2 = setTimeout(() => {
-      onPhaseChange("moving");
-    }, 2800);
-
-    const t3 = setTimeout(() => {
-      onPhaseChange("dissolving");
-    }, 4800);
-
-    const t4 = setTimeout(() => {
-      onPhaseChange("done");
-    }, 6200);
-
-    timeoutsRef.current.push(t1, t2, t3, t4);
-  }, [onPhaseChange, reducedMotion, clearAll]);
+      timeoutsRef.current.push(t1, t2, t3);
+    },
+    [onPhaseChange, reducedMotion, clearAll],
+  );
 
   useEffect(() => {
     return clearAll;
   }, [clearAll]);
 
-  return { start };
+  return { start, cancel: clearAll };
 }

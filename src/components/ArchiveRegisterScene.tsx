@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import registerBg from "@/assets/register-bg.jpg";
+import registerBg from "@/assets/register-bg.jpeg";
 
 interface ArchiveRegisterSceneProps {
   visible: boolean;
@@ -111,21 +111,16 @@ const ArchiveRegisterScene = ({ visible, onExplore }: ArchiveRegisterSceneProps)
           {/* Primary */}
           <button
             onClick={onExplore}
-            className="px-8 py-3.5 bg-primary text-primary-foreground rounded-xl font-body font-semibold text-sm tracking-wide shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+            className="px-8 py-3.5 bg-primary text-white rounded-xl font-body font-semibold text-sm tracking-wide shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
             aria-label="Explorer le mur virtuel"
           >
-           <Link
-  to="/"
-  className="font-body text-sm text-muted-foreground hover:text-brand-sage underline underline-offset-4 transition-colors"
->
- Explorer le mur virtuel
-</Link> 
+            Explorer le mur virtuel
           </button>
 
           {/* Secondary */}
           <button
             onClick={() => navigate("/archives")}
-            className="px-8 py-3.5 bg-transparent border border-brand-forest text-brand-forest rounded-xl font-body font-semibold text-sm tracking-wide hover:bg-brand-forest hover:text-primary-foreground transition-all duration-300"
+            className="px-8 py-3.5 bg-primary text-white rounded-xl font-body font-semibold text-sm tracking-wide shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
             aria-label="Ouvrir le registre"
           >
             Ouvrir le registre

@@ -25,6 +25,15 @@ const missions = [
   "Construire une mémoire collective",
 ];
 
+const projectTeam = [
+  { first: "Eddy", last: "TRABELSI" },
+  { first: "Jérémie", last: "ALANHI" },
+  { first: "Yanis", last: "LALDJI" },
+  { first: "Noemi", last: "SABINI" },
+  { first: "Maëlys", last: "FLEURY" },
+  { first: "Lucas", last: "MARTINS FERREIRA" },
+] as const;
+
 const socials = [
   { icon: Linkedin, label: "LinkedIn", href: "#" },
   { icon: Twitter, label: "X", href: "#" },
@@ -221,10 +230,23 @@ const About = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-8 border-t border-border">
-        <p className="text-center text-sm text-muted-foreground">
-          © 2026 Fragmentis Vitae Asia
-        </p>
+      <footer className="py-10 border-t border-border bg-card/30">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <p className="text-center text-xs uppercase tracking-wider text-muted-foreground mb-4">
+            Équipe projet
+          </p>
+          <ul className="flex flex-wrap justify-center gap-x-6 gap-y-2 mb-8 text-sm text-card-foreground">
+            {projectTeam.map((member) => (
+              <li key={`${member.first}-${member.last}`}>
+                <span>{member.first}</span>{" "}
+                <span className="font-semibold uppercase tracking-wide">{member.last}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-center text-sm text-muted-foreground border-t border-border/60 pt-8">
+            © 2026 Fragmentis Vitae Asia
+          </p>
+        </div>
       </footer>
     </div>
   );
