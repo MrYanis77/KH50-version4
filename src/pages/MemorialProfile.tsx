@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { AddInformationDialog } from "@/components/AddInformationDialog";
 import { MediaRenderer } from "@/components/MediaRenderer";
 import FamilySpiderGraph from "@/components/FamilySpiderGraph";
-import SepultureVirtuelle from "@/components/SepultureVirtuelle";
 import { notifyAdminsOnCreate } from "@/services/notificationService";
 
 function victimeStatutNumeric(v: VictimeRow): number {
@@ -592,9 +591,6 @@ const MemorialProfile = () => {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Sépulture virtuelle */}
-      <SepultureVirtuelle victime={person} />
 
       {/* Footer */}
       <footer className="py-8 text-center text-xs text-muted-foreground border-t border-border mt-10">
