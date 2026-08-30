@@ -159,7 +159,7 @@ const MemorialWall = () => {
               </div>
 
               {filteredPeople.length === 0 && !loading && (
-                <div className="text-center py-16 text-muted-foreground font-mono">
+                <div className="text-cente py-16 text-muted-foreground font-mono">
                   Aucune personne trouvée pour "{searchQuery}"
                 </div>
               )}
